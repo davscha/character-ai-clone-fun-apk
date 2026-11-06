@@ -56,6 +56,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.FilterChip
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -89,21 +92,40 @@ fun ModelsScreen(vm: AppViewModel) {
                     modifier = Modifier.fillMaxWidth(),
                 )
 
-                SectionTitle("Modelle")
-                StorageHint(vm)
-                vm.allModels.filter { it.url.isNotEmpty() }.forEach { model -> ModelCard(vm, model) }
-                EngineStatus(vm)
+                SectionTitle("KI-Quelle")
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(
+                        selected = !vm.useOllama,
+                        onClick = { vm.setSource(false) },
+                        label = { Text("Intern – auf diesem Gerät") },
+                    )
+                    FilterChip(
+                        selected = vm.useOllama,
+                        onClick = { vm.setSource(true) },
+                        label = { Text("Lokal – Ollama im Netzwerk") },
+                    )
+                }
 
-                SectionTitle("Eigene Modelle")
-                Text(
-                    "Jede .litertlm-Datei im Ordner CharacterFun/Modelle erscheint hier – zum Beispiel " +
-                        "Gemma 4 12B von Hugging Face. Achtung: Modelle, die nicht für Android gedacht sind, " +
-                        "können die App beim Laden abstürzen lassen.",
-                    fontSize = 13.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                vm.allModels.filter { it.url.isEmpty() }.forEach { model -> ModelCard(vm, model) }
-                ImportBox(vm)
+                if (vm.useOllama) {
+                    OllamaSettings(vm)
+                    EngineStatus(vm)
+                } else {
+                    SectionTitle("Modelle")
+                    StorageHint(vm)
+                    vm.allModels.filter { it.url.isNotEmpty() }.forEach { model -> ModelCard(vm, model) }
+                    EngineStatus(vm)
+
+                    SectionTitle("Eigene Modelle")
+                    Text(
+                        "Jede .litertlm-Datei im Ordner CharacterFun/Modelle erscheint hier – zum Beispiel " +
+                            "Gemma 4 12B von Hugging Face. Achtung: Modelle, die nicht für Android gedacht sind, " +
+                            "können die App beim Laden abstürzen lassen.",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    vm.allModels.filter { it.url.isEmpty() }.forEach { model -> ModelCard(vm, model) }
+                    ImportBox(vm)
+                }
 
                 SectionTitle("Kreativität")
                 Text(
@@ -118,6 +140,97 @@ fun ModelsScreen(vm: AppViewModel) {
                 )
                 Spacer(Modifier.height(32.dp))
             }
+        }
+    }
+}
+
+/** Ollama auf dem PC: Adresse, Port, Verbindungstest und Modellauswahl mit Bild-Check. */
+@Composable
+private fun OllamaSettings(vm: AppViewModel) {
+    var portText by remember(vm.ollamaPort) { mutableStateOf(vm.ollamaPort.toString()) }
+    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        OutlinedTextField(
+            value = vm.ollamaHost,
+            onValueChange = { vm.changeOllamaHost(it) },
+            label = { Text("IP-Adresse des PCs") },
+            placeholder = { Text("192.168.178.20") },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+            modifier = Modifier.weight(1f),
+        )
+        OutlinedTextField(
+            value = portText,
+            onValueChange = { t ->
+                portText = t.filter { it.isDigit() }.take(5)
+                portText.toIntOrNull()?.takeIf { it in 1..65535 }?.let { vm.changeOllamaPort(it) }
+            },
+            label = { Text("Port") },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            modifier = Modifier.width(120.dp),
+        )
+    }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Button(onClick = { vm.testOllama() }, enabled = vm.ollamaStatus !is OllamaStatus.Testing) { Text("Verbindung testen") }
+        Spacer(Modifier.width(12.dp))
+        when (val st = vm.ollamaStatus) {
+            OllamaStatus.Untested -> Text("Noch nicht getestet", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            OllamaStatus.Testing -> {
+                CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                Spacer(Modifier.width(8.dp))
+                Text("Prüfe …", fontSize = 13.sp)
+            }
+            is OllamaStatus.Ok -> Text(
+                "Verbunden · Ollama ${st.version} · ${st.models.size} Modelle",
+                fontSize = 13.sp,
+                color = MaterialTheme.colorScheme.secondary,
+            )
+            is OllamaStatus.Failed -> {}
+        }
+    }
+    (vm.ollamaStatus as? OllamaStatus.Failed)?.let {
+        Text(it.message, fontSize = 13.sp, color = MaterialTheme.colorScheme.error)
+    }
+    Text(
+        "Tipp: Ollama muss im Netzwerk erreichbar sein – auf dem PC die Umgebungsvariable OLLAMA_HOST=0.0.0.0 setzen und Ollama neu starten.",
+        fontSize = 12.sp,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+
+    (vm.ollamaStatus as? OllamaStatus.Ok)?.let { ok ->
+        if (ok.models.isEmpty()) {
+            Text("Auf dem PC ist noch kein Modell installiert (z. B. ollama pull gemma4:e4b).", fontSize = 13.sp)
+        }
+        ok.models.forEach { m ->
+            val selected = vm.ollamaModel == m.name
+            val shape = RoundedCornerShape(12.dp)
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(shape)
+                    .border(
+                        width = if (selected) 2.dp else 1.dp,
+                        color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                        shape = shape,
+                    )
+                    .clickable { vm.selectOllamaModel(m.name) }
+                    .padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(m.name, fontWeight = FontWeight.SemiBold)
+                    Text("%.1f GB".format(m.sizeBytes / 1e9), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Text(
+                    if (m.vision) "Bilder ✓" else "Bilder ✗",
+                    fontSize = 12.sp,
+                    color = if (m.vision) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    } ?: run {
+        if (vm.ollamaModel.isNotBlank()) {
+            Text("Gewähltes Modell: ${vm.ollamaModel}", fontSize = 13.sp)
         }
     }
 }
@@ -275,7 +388,8 @@ private fun EngineStatus(vm: AppViewModel) {
     val downloaded = vm.downloads[vm.selectedModel.id] is DownloadState.Done
     when (val s = vm.engineState) {
         EngineState.Idle -> Text(
-            if (downloaded) "${vm.selectedModel.title} wird geladen, sobald du einen Chat öffnest."
+            if (vm.useOllama) "Das Ollama-Modell wird geladen, sobald du einen Chat öffnest."
+            else if (downloaded) "${vm.selectedModel.title} wird geladen, sobald du einen Chat öffnest."
             else "Lade ${vm.selectedModel.title} herunter, um loszulegen.",
             fontSize = 13.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,

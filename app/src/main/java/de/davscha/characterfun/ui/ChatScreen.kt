@@ -294,7 +294,11 @@ private fun EngineOverlay(vm: AppViewModel, modifier: Modifier) {
             s is EngineState.Failed -> {
                 Text(s.message, textAlign = TextAlign.Center)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(onClick = { vm.navigate(Screen.Models) }) { Text("Zu den Modellen") }
+                    if (vm.useOllama) {
+                        TextButton(onClick = { vm.switchToInternal() }) { Text("Auf intern wechseln") }
+                    } else {
+                        TextButton(onClick = { vm.navigate(Screen.Models) }) { Text("Zu den Einstellungen") }
+                    }
                     Button(onClick = { vm.retryChat() }) { Text("Nochmal versuchen") }
                 }
             }

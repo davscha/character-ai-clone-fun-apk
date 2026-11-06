@@ -179,7 +179,11 @@ fun EditorScreen(vm: AppViewModel, characterId: String?) {
                     }
                 }
 
-                Text("Lieblingsmodell", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    if (vm.useOllama) "Lieblingsmodell (gilt nur im Modus \"Intern\" – gerade ist Ollama aktiv)" else "Lieblingsmodell",
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilterChip(
                         selected = c.preferredModelId.isEmpty(),

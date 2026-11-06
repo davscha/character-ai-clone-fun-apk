@@ -22,6 +22,9 @@ import de.davscha.characterfun.data.ReplySuggestions
 import de.davscha.characterfun.engine.Accelerator
 import de.davscha.characterfun.engine.ChatEngine
 import de.davscha.characterfun.engine.LiteRtEngine
+import de.davscha.characterfun.engine.OllamaClient
+import de.davscha.characterfun.engine.OllamaEngine
+import de.davscha.characterfun.engine.OllamaModel
 import de.davscha.characterfun.engine.Speaker
 import de.davscha.characterfun.model.ModelCatalog
 import de.davscha.characterfun.model.ModelDownloader
@@ -52,6 +55,14 @@ sealed interface EngineState {
     data class Failed(val message: String) : EngineState
 }
 
+/** Ergebnis des Ollama-Verbindungstests */
+sealed interface OllamaStatus {
+    data object Untested : OllamaStatus
+    data object Testing : OllamaStatus
+    data class Ok(val version: String, val models: List<OllamaModel>) : OllamaStatus
+    data class Failed(val message: String) : OllamaStatus
+}
+
 /** Die Seiten der App */
 sealed interface Screen {
     data object Gallery : Screen
@@ -65,7 +76,93 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private val context get() = getApplication<Application>()
     private val prefs = app.getSharedPreferences("einstellungen", Context.MODE_PRIVATE)
-    private val engine: ChatEngine = LiteRtEngine(app)
+    private val internalEngine: ChatEngine = LiteRtEngine(app)
+    private val ollamaEngine: ChatEngine = OllamaEngine { ollamaHost to ollamaPort }
+
+    /** Die gerade aktive KI: auf dem Gerät oder Ollama auf dem PC */
+    private val engine: ChatEngine get() = if (useOllama) ollamaEngine else internalEngine
+
+    // ---------- KI-Quelle: Intern oder Ollama ----------
+
+    /** true = Ollama im Heimnetz, false = Gemma auf dem Gerät */
+    var useOllama by mutableStateOf(prefs.getString("quelle", "intern") == "ollama")
+        private set
+    var ollamaHost by mutableStateOf(prefs.getString("ollama_host", "") ?: "")
+        private set
+    var ollamaPort by mutableStateOf(prefs.getInt("ollama_port", OLLAMA_DEFAULT_PORT))
+        private set
+    var ollamaModel by mutableStateOf(prefs.getString("ollama_model", "") ?: "")
+        private set
+    var ollamaStatus by mutableStateOf<OllamaStatus>(OllamaStatus.Untested)
+        private set
+
+    /** Das gewählte Ollama-Modell als ModelInfo (url = "ollama", fileName = Modellname) */
+    private val ollamaModelInfo: ModelInfo?
+        get() = ollamaModel.takeIf { it.isNotBlank() }?.let {
+            ModelInfo(id = "ollama:$it", title = it, description = "Ollama auf dem PC", fileName = it, url = OLLAMA, sizeBytes = 0)
+        }
+
+    fun setSource(ollama: Boolean) {
+        if (ollama == useOllama) return
+        stop()
+        engine.close()
+        useOllama = ollama
+        prefs.edit().putString("quelle", if (ollama) "ollama" else "intern").apply()
+        engineState = EngineState.Idle
+        needsRebuild = true
+        if (ollama && ollamaHost.isNotBlank() && ollamaStatus !is OllamaStatus.Ok) testOllama()
+    }
+
+    /** Aus dem Chat heraus: Ollama nicht erreichbar → auf das Gerät umschalten und weitermachen */
+    fun switchToInternal() {
+        setSource(false)
+        if (chatCharacter != null) prepareConversation()
+    }
+
+    fun changeOllamaHost(host: String) {
+        ollamaHost = host.trim()
+        prefs.edit().putString("ollama_host", ollamaHost).apply()
+        ollamaStatus = OllamaStatus.Untested
+    }
+
+    fun changeOllamaPort(port: Int) {
+        ollamaPort = port
+        prefs.edit().putInt("ollama_port", port).apply()
+        ollamaStatus = OllamaStatus.Untested
+    }
+
+    fun selectOllamaModel(name: String) {
+        if (name == ollamaModel) return
+        stop()
+        if (useOllama) engine.close()
+        ollamaModel = name
+        prefs.edit().putString("ollama_model", name).apply()
+        if (useOllama) engineState = EngineState.Idle
+        needsRebuild = true
+    }
+
+    /** Verbindungstest: Ollama erreichbar? Welche Modelle gibt es, und welche können Bilder? */
+    fun testOllama() {
+        if (ollamaHost.isBlank()) {
+            ollamaStatus = OllamaStatus.Failed("Bitte die IP-Adresse des PCs eintragen.")
+            return
+        }
+        ollamaStatus = OllamaStatus.Testing
+        viewModelScope.launch {
+            ollamaStatus = try {
+                val client = OllamaClient(ollamaHost, ollamaPort)
+                val version = client.version()
+                val models = client.models()
+                // Gewähltes Modell gibt es nicht mehr? Dann das erste nehmen
+                if (models.isNotEmpty() && models.none { it.name == ollamaModel }) selectOllamaModel(models.first().name)
+                OllamaStatus.Ok(version, models)
+            } catch (e: Exception) {
+                OllamaStatus.Failed(
+                    "Nicht erreichbar – läuft der PC und ist Ollama fürs Netzwerk freigegeben? (${e.message ?: e.javaClass.simpleName})"
+                )
+            }
+        }
+    }
     val repo = CharacterRepository(app)
 
     // ---------- Navigation ----------
@@ -221,9 +318,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         selectedModel = model
         prefs.edit().putString("modell", model.id).apply()
         // Anderes Modell gewählt: altes freigeben, das neue wird beim nächsten Chat geladen
-        stop()
-        engine.close()
-        engineState = EngineState.Idle
+        if (!useOllama) {
+            stop()
+            internalEngine.close()
+            engineState = EngineState.Idle
+        }
     }
 
     fun download(model: ModelInfo) {
@@ -313,7 +412,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val ready = engineState
         if (ready is EngineState.Ready && ready.model == model) {
             stop()
-            engine.close()
+            internalEngine.close()
             engineState = EngineState.Idle
         }
         listOf(internalModelsDir(context), sharedModelsDir()).forEach { dir ->
@@ -522,7 +621,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
      * sonst das aus den Einstellungen.
      */
     val chatModel: ModelInfo
-        get() = chatCharacter?.preferredModelId
+        get() = if (useOllama) ollamaModelInfo ?: selectedModel else chatCharacter?.preferredModelId
             ?.let { id -> allModels.firstOrNull { it.id == id } }
             ?.takeIf { downloads[it.id] == DownloadState.Done }
             ?: selectedModel
@@ -530,7 +629,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private fun prepareConversation() {
         val c = chatCharacter ?: return
         val model = chatModel
-        if (downloads[model.id] != DownloadState.Done) {
+        if (useOllama && ollamaModelInfo == null) {
+            engineState = EngineState.Failed("Noch kein Ollama-Modell gewählt – in den Einstellungen \"Verbindung testen\" und ein Modell auswählen.")
+            return
+        }
+        if (!useOllama && downloads[model.id] != DownloadState.Done) {
             engineState = EngineState.Failed("${model.title} ist noch nicht heruntergeladen.")
             return
         }
@@ -556,12 +659,20 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (state is EngineState.Ready && state.model == model) return
         engineState = EngineState.Loading(model.title)
         val start = SystemClock.elapsedRealtime()
-        // Merken, was gerade lädt – stürzt die App dabei ab, warnt sie beim nächsten Start
-        prefs.edit().putString("lade_modell", model.id).commit()
-        val acc = try {
-            engine.load(model.file(context).absolutePath)
-        } finally {
-            prefs.edit().remove("lade_modell").apply()
+        val acc = if (model.url == OLLAMA) {
+            try {
+                engine.load(model.fileName)
+            } catch (e: Exception) {
+                throw IllegalStateException("Ollama nicht erreichbar – läuft der PC? (${e.message ?: e.javaClass.simpleName})", e)
+            }
+        } else {
+            // Merken, was gerade lädt – stürzt die App dabei ab, warnt sie beim nächsten Start
+            prefs.edit().putString("lade_modell", model.id).commit()
+            try {
+                engine.load(model.file(context).absolutePath)
+            } finally {
+                prefs.edit().remove("lade_modell").apply()
+            }
         }
         engineState = EngineState.Ready(model, acc, (SystemClock.elapsedRealtime() - start) / 1000.0)
         needsRebuild = true
@@ -805,8 +916,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
      * bisher geschriebenen Zeichen. Das Chat-Gespräch wird danach beim nächsten Senden neu aufgebaut.
      */
     suspend fun generateProfile(notes: String, base: Character, onProgress: (Int) -> Unit): Character {
-        val model = selectedModel
-        require(downloads[model.id] == DownloadState.Done) { "${model.title} ist noch nicht heruntergeladen (Seite \"Einstellungen\")." }
+        val model = if (useOllama) ollamaModelInfo ?: error("Noch kein Ollama-Modell gewählt (Seite \"Einstellungen\").") else selectedModel
+        require(useOllama || downloads[model.id] == DownloadState.Done) { "${model.title} ist noch nicht heruntergeladen (Seite \"Einstellungen\")." }
         check(!isGenerating) { "Es läuft gerade noch eine Antwort." }
         if (preparing) chatJob?.join()
         ensureModelLoaded(model)
@@ -861,12 +972,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private companion object {
+        const val OLLAMA = "ollama"
+        const val OLLAMA_DEFAULT_PORT = 11434
+
         /** Wie viel Verlauf das Modell mitbekommt – grob 2500 Tokens, passt in 4096 mit Platz für Antworten */
         const val HISTORY_CHARS = 8000
     }
 
     override fun onCleared() {
         speaker.shutdown()
-        engine.close()
+        internalEngine.close()
+        ollamaEngine.close()
     }
 }

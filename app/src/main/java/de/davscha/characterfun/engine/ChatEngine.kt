@@ -3,7 +3,7 @@ package de.davscha.characterfun.engine
 import kotlinx.coroutines.flow.Flow
 
 /** Auf welchem Chip das Modell gerade rechnet. */
-enum class Accelerator(val label: String) { GPU("Grafikchip"), CPU("Prozessor") }
+enum class Accelerator(val label: String) { GPU("Grafikchip"), CPU("Prozessor"), NETWORK("PC (Ollama)") }
 
 /**
  * Die eine Schnittstelle, über die die App mit einem Sprachmodell redet.

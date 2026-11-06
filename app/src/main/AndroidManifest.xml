@@ -18,6 +18,7 @@
         android:icon="@mipmap/ic_launcher"
         android:label="Character Fun"
         android:largeHeap="true"
+        android:usesCleartextTraffic="true"
         android:theme="@android:style/Theme.Material.NoActionBar">
 
         <!-- Nötig, damit LiteRT-LM auf dem Grafikchip (OpenCL) rechnen darf -->
