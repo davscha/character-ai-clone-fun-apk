@@ -57,4 +57,24 @@ object ModelCatalog {
     )
 
     val all = listOf(E2B, E4B)
+
+    /**
+     * Eigene Modelle: jede .litertlm-Datei im Modell-Ordner, die nicht zur festen Liste gehört.
+     * Man kann sie per "Datei wählen" importieren oder einfach selbst in CharacterFun/Modelle legen.
+     */
+    fun customModels(context: Context): List<ModelInfo> {
+        val known = all.map { it.fileName }.toSet()
+        return modelsDir(context).listFiles { f -> f.isFile && f.name.endsWith(".litertlm") && f.name !in known }
+            ?.sortedBy { it.name.lowercase() }
+            ?.map { f ->
+                ModelInfo(
+                    id = "custom:${f.name}",
+                    title = f.name.removeSuffix(".litertlm"),
+                    description = "Eigene Datei",
+                    fileName = f.name,
+                    url = "",
+                    sizeBytes = f.length(),
+                )
+            } ?: emptyList()
+    }
 }

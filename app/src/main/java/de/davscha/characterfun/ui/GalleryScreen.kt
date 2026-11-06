@@ -109,6 +109,10 @@ fun GalleryScreen(vm: AppViewModel) {
                 }
             }
 
+            vm.crashNotice?.let {
+                Box(Modifier.padding(horizontal = 24.dp, vertical = 4.dp)) { CrashNotice(it) { vm.dismissCrashNotice() } }
+            }
+
             // Kategorie-Tabs
             LazyRow(
                 contentPadding = PaddingValues(horizontal = 24.dp),

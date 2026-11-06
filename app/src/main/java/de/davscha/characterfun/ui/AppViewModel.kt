@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.Context
 import android.net.Uri
 import android.os.SystemClock
+import android.provider.OpenableColumns
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
@@ -22,6 +23,7 @@ import de.davscha.characterfun.model.ModelDownloader
 import de.davscha.characterfun.model.ModelInfo
 import de.davscha.characterfun.model.hasSharedStorage
 import de.davscha.characterfun.model.internalModelsDir
+import de.davscha.characterfun.model.modelsDir
 import de.davscha.characterfun.model.sharedModelsDir
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -89,9 +91,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     // ---------- Modelle ----------
 
     val downloads = mutableStateMapOf<String, DownloadState>()
-    var selectedModel by mutableStateOf(
-        ModelCatalog.all.firstOrNull { it.id == prefs.getString("modell", null) } ?: ModelCatalog.E2B
-    )
+    /** Feste Liste + eigene .litertlm-Dateien aus dem Modell-Ordner */
+    val allModels = mutableStateListOf<ModelInfo>()
+    var selectedModel by mutableStateOf(ModelCatalog.E2B)
+        private set
+
+    /** Import einer eigenen Modelldatei: Name und Fortschritt (null = kein Import) */
+    var importName by mutableStateOf<String?>(null)
+        private set
+    var importState by mutableStateOf<DownloadState?>(null)
+        private set
+
+    /** Hinweis, wenn die App beim letzten Laden eines Modells abgestürzt ist */
+    var crashNotice by mutableStateOf<String?>(null)
         private set
     var engineState by mutableStateOf<EngineState>(EngineState.Idle)
         private set
@@ -127,13 +139,29 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         refreshStorage()
+        val savedId = prefs.getString("modell", null)
+        selectedModel = allModels.firstOrNull { it.id == savedId } ?: ModelCatalog.E2B
+        // Ist die App beim letzten Laden abgestürzt (z. B. Modell zu groß)? Dann zurück zu E2B.
+        prefs.getString("lade_modell", null)?.let { crashedId ->
+            val title = allModels.firstOrNull { it.id == crashedId }?.title ?: crashedId.removePrefix("custom:")
+            crashNotice = "Beim letzten Laden von $title ist die App abgestürzt – vermutlich ist das Modell zu groß " +
+                "für dieses Tablet. Es ist wieder Gemma 4 E2B ausgewählt."
+            prefs.edit().remove("lade_modell").putString("modell", ModelCatalog.E2B.id).apply()
+            selectedModel = ModelCatalog.E2B
+        }
+    }
+
+    fun dismissCrashNotice() {
+        crashNotice = null
     }
 
     /** Beim Start und nach Rückkehr aus den Einstellungen: Speicherort prüfen, alte Dateien umziehen. */
     fun refreshStorage() {
         val wasShared = sharedStorage
         sharedStorage = hasSharedStorage()
-        ModelCatalog.all.forEach { m ->
+        allModels.clear()
+        allModels.addAll(ModelCatalog.all + ModelCatalog.customModels(context))
+        allModels.forEach { m ->
             val busy = downloads[m.id] is DownloadState.Running || downloads[m.id] is DownloadState.Moving
             if (!busy) downloads[m.id] = if (m.isDownloaded(context)) DownloadState.Done else DownloadState.Missing
         }
@@ -220,6 +248,62 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         downloadJobs.remove(model.id)?.cancel()
     }
 
+    /** Eigene .litertlm-Datei in den Modell-Ordner kopieren (LiteRT-LM braucht einen echten Dateipfad). */
+    fun importModel(uri: Uri) {
+        if (importState is DownloadState.Moving) return
+        val name = context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
+            ?.use { if (it.moveToFirst()) it.getString(0) else null } ?: "modell.litertlm"
+        importName = name
+        if (!name.endsWith(".litertlm")) {
+            importState = DownloadState.Failed("Das ist keine .litertlm-Datei.")
+            return
+        }
+        val target = File(modelsDir(context), name)
+        if (target.exists()) {
+            importState = DownloadState.Failed("Diese Datei liegt schon im Modell-Ordner.")
+            return
+        }
+        val total = context.contentResolver.query(uri, arrayOf(OpenableColumns.SIZE), null, null, null)
+            ?.use { if (it.moveToFirst()) it.getLong(0) else 0L } ?: 0L
+        importState = DownloadState.Moving(0, total)
+        viewModelScope.launch {
+            val tmp = File(target.parentFile, "$name.part")
+            try {
+                withContext(Dispatchers.IO) {
+                    context.contentResolver.openInputStream(uri)!!.use { input ->
+                        tmp.outputStream().use { out ->
+                            val buf = ByteArray(1 shl 20)
+                            var copied = 0L
+                            var lastReport = 0L
+                            while (true) {
+                                val n = input.read(buf)
+                                if (n < 0) break
+                                out.write(buf, 0, n)
+                                copied += n
+                                if (copied - lastReport > (32L shl 20)) {
+                                    lastReport = copied
+                                    withContext(Dispatchers.Main) { importState = DownloadState.Moving(copied, total) }
+                                }
+                            }
+                        }
+                    }
+                    if (!tmp.renameTo(target)) error("Datei konnte nicht gespeichert werden")
+                }
+                importState = null
+                importName = null
+                refreshStorage()
+            } catch (e: Exception) {
+                tmp.delete()
+                importState = DownloadState.Failed(e.message ?: "Import fehlgeschlagen")
+            }
+        }
+    }
+
+    fun dismissImportError() {
+        importState = null
+        importName = null
+    }
+
     fun delete(model: ModelInfo) {
         val ready = engineState
         if (ready is EngineState.Ready && ready.model == model) {
@@ -232,6 +316,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             File(dir, "${model.fileName}.part").delete()
         }
         downloads[model.id] = DownloadState.Missing
+        // Eigene Modelle verschwinden ganz aus der Liste
+        if (model.url.isEmpty()) {
+            allModels.remove(model)
+            downloads.remove(model.id)
+            if (selectedModel == model) select(ModelCatalog.E2B)
+        }
     }
 
     // ---------- Figuren bearbeiten ----------
@@ -304,7 +394,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 if (state !is EngineState.Ready || state.model != model) {
                     engineState = EngineState.Loading(model.title)
                     val start = SystemClock.elapsedRealtime()
-                    val acc = engine.load(model.file(context).absolutePath)
+                    // Merken, was gerade lädt – stürzt die App dabei ab, warnt sie beim nächsten Start
+                    prefs.edit().putString("lade_modell", model.id).commit()
+                    val acc = try {
+                        engine.load(model.file(context).absolutePath)
+                    } finally {
+                        prefs.edit().remove("lade_modell").apply()
+                    }
                     engineState = EngineState.Ready(model, acc, (SystemClock.elapsedRealtime() - start) / 1000.0)
                 }
                 withContext(Dispatchers.IO) {

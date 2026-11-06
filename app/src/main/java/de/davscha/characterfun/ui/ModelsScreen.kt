@@ -3,6 +3,8 @@ package de.davscha.characterfun.ui
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -75,9 +77,21 @@ fun ModelsScreen(vm: AppViewModel) {
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Column(Modifier.widthIn(max = 640.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                vm.crashNotice?.let { CrashNotice(it) { vm.dismissCrashNotice() } }
                 StorageHint(vm)
-                ModelCatalog.all.forEach { model -> ModelCard(vm, model) }
+                vm.allModels.filter { it.url.isNotEmpty() }.forEach { model -> ModelCard(vm, model) }
                 EngineStatus(vm)
+
+                SectionTitle("Eigene Modelle")
+                Text(
+                    "Jede .litertlm-Datei im Ordner CharacterFun/Modelle erscheint hier – zum Beispiel " +
+                        "Gemma 4 12B von Hugging Face. Achtung: Modelle, die nicht für Android gedacht sind, " +
+                        "können die App beim Laden abstürzen lassen.",
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                vm.allModels.filter { it.url.isEmpty() }.forEach { model -> ModelCard(vm, model) }
+                ImportBox(vm)
 
                 SectionTitle("Kreativität")
                 Text(
@@ -92,6 +106,49 @@ fun ModelsScreen(vm: AppViewModel) {
                 )
                 Spacer(Modifier.height(32.dp))
             }
+        }
+    }
+}
+
+/** Hinweis nach einem Absturz beim Laden */
+@Composable
+fun CrashNotice(text: String, onDismiss: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.error.copy(alpha = 0.15f))
+            .padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(text, fontSize = 13.sp, modifier = Modifier.weight(1f))
+        TextButton(onClick = onDismiss) { Text("OK") }
+    }
+}
+
+/** Eigene .litertlm-Datei auswählen und in den Modell-Ordner kopieren. */
+@Composable
+private fun ImportBox(vm: AppViewModel) {
+    val pick = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) vm.importModel(uri)
+    }
+    when (val st = vm.importState) {
+        is DownloadState.Moving -> Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            val fraction = if (st.total > 0) st.copied.toFloat() / st.total else 0f
+            Text("${vm.importName} wird kopiert …", fontSize = 13.sp)
+            LinearProgressIndicator(progress = { fraction }, modifier = Modifier.fillMaxWidth())
+            Text(
+                "%.2f / %.2f GB".format(st.copied / 1e9, st.total / 1e9),
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        is DownloadState.Failed -> Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("${vm.importName}: ${st.message}", color = MaterialTheme.colorScheme.error, fontSize = 13.sp, modifier = Modifier.weight(1f))
+            TextButton(onClick = { vm.dismissImportError() }) { Text("OK") }
+        }
+        else -> OutlinedButton(onClick = { pick.launch(arrayOf("*/*")) }, modifier = Modifier.fillMaxWidth()) {
+            Text(".litertlm-Datei wählen")
         }
     }
 }
