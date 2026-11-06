@@ -4,12 +4,13 @@
 
 Kleiner character.ai-Klon für Android-Tablets – just for fun. Figuren anlegen und mit ihnen chatten, komplett offline: Die Sprachmodelle laufen direkt auf dem Tablet.
 
-## Stand: Meilenstein 1 – Modell-Test
+## Stand: Meilenstein 3 – Figuren
 
-- **Gemma 4 E2B** (2,6 GB, schnell) und **Gemma 4 E4B** (3,7 GB, klüger) herunterladen, pausieren, fortsetzen, löschen
-- Modell über Googles **LiteRT-LM** auf dem Grafikchip laden (automatischer Ausweich auf den Prozessor)
-- Probe-Chat mit einer Test-Figur (Kapitän Kraken), Definition und Begrüßung frei änderbar
-- Antworten erscheinen Wort für Wort, Stopp-Knopf, Messwerte unter jeder Antwort (Zeit bis zum ersten Wort, Gesamtzeit)
+- **Galerie** mit Kategorien, Suche und sechs mitgelieferten, frei erfundenen Beispiel-Figuren
+- **Eigene Figuren** erstellen und bearbeiten: Name, Bild oder Emoji, Kategorie, Kurzbeschreibung, Begrüßung, Definition, Hintergrund, Gesprächsstarter
+- **Chat** mit der gewählten Figur: Antworten Wort für Wort, Stopp-Knopf, *Handlungen* kursiv, Gesprächsstarter als Vorschläge
+- **Modelle:** Gemma 4 E2B (2,6 GB) und E4B (3,7 GB) über Googles LiteRT-LM auf dem Grafikchip
+- Modelle und Figuren liegen dauerhaft im Ordner **CharacterFun** (mit Erlaubnis "Zugriff auf alle Dateien") und überstehen Neuinstallationen
 
 ## Installieren
 

@@ -69,6 +69,8 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
 
+    implementation("io.coil-kt:coil-compose:2.7.0")          // Avatarbilder
+
     // Gemma 4 auf dem Grafikchip (gleiche Version wie Googles AI Edge Gallery)
     implementation("com.google.ai.edge.litertlm:litertlm-android:0.18.1")
 }

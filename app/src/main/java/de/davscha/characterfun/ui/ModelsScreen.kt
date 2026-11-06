@@ -29,7 +29,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Stop
@@ -62,81 +62,43 @@ import androidx.compose.ui.unit.sp
 import de.davscha.characterfun.model.ModelCatalog
 import de.davscha.characterfun.model.ModelInfo
 
-/** Tablet-Layout: links Modell und Figur, rechts der Chat. */
+/** Seite "Modelle": herunterladen, auswählen, Speicherort, Kreativität. */
 @Composable
-fun TestChatScreen(vm: TestChatViewModel) {
-    Row(
-        Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .safeDrawingPadding()
-    ) {
-        SidePanel(vm, Modifier.width(360.dp).fillMaxHeight())
-        Box(Modifier.width(1.dp).fillMaxHeight().background(MaterialTheme.colorScheme.outline))
-        ChatPanel(vm, Modifier.weight(1f).fillMaxHeight())
-    }
-}
-
-@Composable
-private fun SidePanel(vm: TestChatViewModel, modifier: Modifier) {
-    Column(
-        modifier
-            .background(MaterialTheme.colorScheme.surface)
-            .verticalScroll(rememberScrollState())
-            .padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Text("Character Fun", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-        Text("Modell-Test (Meilenstein 1)", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
-
-        SectionTitle("Modell")
-        StorageHint(vm)
-        ModelCatalog.all.forEach { model -> ModelCard(vm, model) }
-
-        EngineStatus(vm)
-
-        SectionTitle("Probe-Figur")
-        OutlinedTextField(
-            value = vm.systemPrompt,
-            onValueChange = { vm.systemPrompt = it },
-            label = { Text("Definition (Persönlichkeit)") },
-            modifier = Modifier.fillMaxWidth(),
-            minLines = 5,
-            maxLines = 10,
-        )
-        OutlinedTextField(
-            value = vm.greeting,
-            onValueChange = { vm.greeting = it },
-            label = { Text("Begrüßung") },
-            modifier = Modifier.fillMaxWidth(),
-            minLines = 2,
-            maxLines = 4,
-        )
-        Text(
-            "Kreativität: %.1f".format(vm.temperature),
-            fontSize = 13.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Slider(
-            value = vm.temperature.toFloat(),
-            onValueChange = { vm.temperature = (it * 10).toInt() / 10.0 },
-            valueRange = 0.1f..1.5f,
-        )
-        OutlinedButton(
-            onClick = vm::restartConversation,
-            enabled = vm.engineState is EngineState.Ready,
-            modifier = Modifier.fillMaxWidth(),
+fun ModelsScreen(vm: AppViewModel) {
+    Column(Modifier.fillMaxSize()) {
+        Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = { vm.back() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Zurück") }
+            Text("Modelle", fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
+        }
+        Column(
+            Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Icon(Icons.Default.Refresh, null)
-            Spacer(Modifier.width(8.dp))
-            Text("Neues Gespräch mit dieser Figur")
+            Column(Modifier.widthIn(max = 640.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                StorageHint(vm)
+                ModelCatalog.all.forEach { model -> ModelCard(vm, model) }
+                EngineStatus(vm)
+
+                SectionTitle("Kreativität")
+                Text(
+                    "%.1f – niedrig = vorhersehbar, hoch = verrückter. Gilt ab dem nächsten Gespräch.".format(vm.temperature),
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Slider(
+                    value = vm.temperature.toFloat(),
+                    onValueChange = { vm.changeTemperature((it * 10).toInt() / 10.0) },
+                    valueRange = 0.1f..1.5f,
+                )
+                Spacer(Modifier.height(32.dp))
+            }
         }
     }
 }
 
 /** Bittet um die Erlaubnis, Modelle dauerhaft in /CharacterFun/Modelle zu speichern. */
 @Composable
-private fun StorageHint(vm: TestChatViewModel) {
+private fun StorageHint(vm: AppViewModel) {
     val context = LocalContext.current
     if (vm.sharedStorage) {
         Text(
@@ -178,7 +140,7 @@ private fun SectionTitle(text: String) {
 }
 
 @Composable
-private fun ModelCard(vm: TestChatViewModel, model: ModelInfo) {
+private fun ModelCard(vm: AppViewModel, model: ModelInfo) {
     val selected = vm.selectedModel == model
     val state = vm.downloads[model.id] ?: DownloadState.Missing
     val shape = RoundedCornerShape(12.dp)
@@ -240,14 +202,15 @@ private fun ModelCard(vm: TestChatViewModel, model: ModelInfo) {
 }
 
 @Composable
-private fun EngineStatus(vm: TestChatViewModel) {
+private fun EngineStatus(vm: AppViewModel) {
     val downloaded = vm.downloads[vm.selectedModel.id] is DownloadState.Done
     when (val s = vm.engineState) {
-        EngineState.Idle -> Button(
-            onClick = vm::loadSelected,
-            enabled = downloaded,
-            modifier = Modifier.fillMaxWidth(),
-        ) { Text(if (downloaded) "${vm.selectedModel.title} laden" else "Erst herunterladen") }
+        EngineState.Idle -> Text(
+            if (downloaded) "${vm.selectedModel.title} wird geladen, sobald du einen Chat öffnest."
+            else "Lade ${vm.selectedModel.title} herunter, um loszulegen.",
+            fontSize = 13.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
 
         is EngineState.Loading -> Row(verticalAlignment = Alignment.CenterVertically) {
             CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
@@ -256,134 +219,15 @@ private fun EngineStatus(vm: TestChatViewModel) {
         }
 
         is EngineState.Ready -> Text(
-            "${s.modelTitle} läuft auf dem ${s.accelerator.label} · geladen in %.1f s".format(s.loadSeconds),
+            "${s.model.title} läuft auf dem ${s.accelerator.label} · geladen in %.1f s".format(s.loadSeconds),
             fontSize = 13.sp,
             color = MaterialTheme.colorScheme.secondary,
         )
 
         is EngineState.Failed -> Column {
             Text("Laden fehlgeschlagen: ${s.message}", color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
-            TextButton(onClick = vm::loadSelected) { Text("Nochmal versuchen") }
+
         }
     }
 }
 
-@Composable
-private fun ChatPanel(vm: TestChatViewModel, modifier: Modifier) {
-    val listState = rememberLazyListState()
-    val lastText = vm.messages.lastOrNull()?.text
-    // Beim Streamen immer zur neuesten Nachricht scrollen
-    LaunchedEffect(vm.messages.size, lastText) {
-        if (vm.messages.isNotEmpty()) listState.scrollToItem(vm.messages.lastIndex, Int.MAX_VALUE)
-    }
-
-    Column(modifier.imePadding()) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Avatar("K")
-            Spacer(Modifier.width(12.dp))
-            Column {
-                Text("Probe-Figur", fontWeight = FontWeight.SemiBold)
-                Text("Alles, was Figuren sagen, ist erfunden.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
-        HorizontalDivider(color = MaterialTheme.colorScheme.outline)
-
-        Box(Modifier.weight(1f).fillMaxWidth()) {
-            if (vm.engineState !is EngineState.Ready) {
-                Text(
-                    "Links ein Modell herunterladen und laden – dann geht's los.",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.align(Alignment.Center),
-                )
-            }
-            LazyColumn(
-                state = listState,
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(24.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
-            ) {
-                itemsIndexed(vm.messages) { i, msg ->
-                    val streaming = vm.isGenerating && i == vm.messages.lastIndex
-                    MessageBubble(msg, streaming)
-                }
-            }
-        }
-
-        InputBar(vm)
-    }
-}
-
-@Composable
-private fun Avatar(letter: String) {
-    Box(
-        Modifier.size(40.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary),
-        contentAlignment = Alignment.Center,
-    ) { Text(letter, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimary) }
-}
-
-@Composable
-private fun MessageBubble(msg: ChatMessage, streaming: Boolean) {
-    Row(
-        Modifier.fillMaxWidth(),
-        horizontalArrangement = if (msg.fromUser) Arrangement.End else Arrangement.Start,
-    ) {
-        if (!msg.fromUser) {
-            Avatar("K")
-            Spacer(Modifier.width(10.dp))
-        }
-        Column(horizontalAlignment = if (msg.fromUser) Alignment.End else Alignment.Start) {
-            Box(
-                Modifier
-                    .widthIn(max = 620.dp)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(
-                        if (msg.fromUser) MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
-                        else MaterialTheme.colorScheme.surfaceVariant
-                    )
-                    .padding(horizontal = 14.dp, vertical = 10.dp)
-            ) {
-                Text(
-                    text = msg.text.ifEmpty { if (streaming) "…" else "" },
-                    fontSize = 16.sp,
-                    lineHeight = 22.sp,
-                )
-            }
-            msg.stats?.let {
-                Text(it, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp, start = 4.dp))
-            }
-        }
-    }
-}
-
-@Composable
-private fun InputBar(vm: TestChatViewModel) {
-    var text by remember { mutableStateOf("") }
-    val ready = vm.engineState is EngineState.Ready
-    Row(
-        Modifier.fillMaxWidth().padding(16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        OutlinedTextField(
-            value = text,
-            onValueChange = { text = it },
-            placeholder = { Text("Nachricht an die Figur …") },
-            enabled = ready,
-            modifier = Modifier.weight(1f),
-            maxLines = 5,
-            shape = RoundedCornerShape(24.dp),
-        )
-        Spacer(Modifier.width(10.dp))
-        if (vm.isGenerating) {
-            FilledIconButton(onClick = vm::stop, modifier = Modifier.size(52.dp)) {
-                Icon(Icons.Default.Stop, "Stopp")
-            }
-        } else {
-            FilledIconButton(
-                onClick = { vm.send(text); text = "" },
-                enabled = ready && text.isNotBlank(),
-                modifier = Modifier.size(52.dp),
-            ) { Icon(Icons.AutoMirrored.Filled.Send, "Senden") }
-        }
-    }
-    Spacer(Modifier.height(4.dp))
-}

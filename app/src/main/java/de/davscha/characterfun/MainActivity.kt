@@ -11,12 +11,12 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.LaunchedEffect
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import de.davscha.characterfun.ui.CharacterFunTheme
-import de.davscha.characterfun.ui.TestChatScreen
-import de.davscha.characterfun.ui.TestChatViewModel
+import de.davscha.characterfun.ui.App
+import de.davscha.characterfun.ui.AppViewModel
 
 class MainActivity : ComponentActivity() {
 
-    private val viewModel: TestChatViewModel by viewModels()
+    private val viewModel: AppViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -35,7 +35,7 @@ class MainActivity : ComponentActivity() {
             }
             CharacterFunTheme {
                 // Surface setzt die helle Schriftfarbe für alle Texte darin
-                Surface(color = MaterialTheme.colorScheme.background) { TestChatScreen(viewModel) }
+                Surface(color = MaterialTheme.colorScheme.background) { App(viewModel) }
             }
         }
     }

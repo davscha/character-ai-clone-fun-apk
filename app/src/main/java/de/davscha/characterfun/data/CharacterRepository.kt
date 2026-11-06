@@ -1,0 +1,87 @@
+package de.davscha.characterfun.data
+
+import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.net.Uri
+import android.os.Environment
+import de.davscha.characterfun.model.hasSharedStorage
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.File
+
+/**
+ * Speichert alle Figuren in einer JSON-Datei (figuren.json), Avatarbilder im Ordner Avatare.
+ * Mit der Erlaubnis "Zugriff auf alle Dateien" liegt beides in /CharacterFun und übersteht
+ * Neuinstallationen – genau wie die Modelle.
+ */
+class CharacterRepository(private val context: Context) {
+
+    private val internalDir get() = context.filesDir
+    private val sharedDir get() = File(Environment.getExternalStorageDirectory(), "CharacterFun")
+    private val dataDir: File get() = (if (hasSharedStorage()) sharedDir else internalDir).apply { mkdirs() }
+
+    private val file get() = File(dataDir, "figuren.json")
+    val avatarDir: File get() = File(dataDir, "Avatare").apply { mkdirs() }
+
+    fun avatar(character: Character): File? =
+        character.avatarFile.takeIf { it.isNotEmpty() }?.let { File(avatarDir, it) }?.takeIf { it.exists() }
+
+    /** Lädt alle Figuren; beim allerersten Start kommen die Beispiel-Figuren hinein. */
+    fun load(): List<Character> {
+        moveInternalToShared()
+        val f = file
+        if (!f.exists()) {
+            save(SampleCharacters.all)
+            return SampleCharacters.all
+        }
+        return runCatching {
+            val arr = JSONObject(f.readText()).getJSONArray("figuren")
+            List(arr.length()) { Character.fromJson(arr.getJSONObject(it)) }
+        }.getOrElse { SampleCharacters.all }
+    }
+
+    fun save(characters: List<Character>) {
+        val json = JSONObject()
+            .put("version", 1)
+            .put("figuren", JSONArray(characters.map { it.toJson() }))
+        // Erst in eine Hilfsdatei schreiben, dann umbenennen – so geht bei einem Absturz nichts kaputt
+        val tmp = File(dataDir, "figuren.json.tmp")
+        tmp.writeText(json.toString(2))
+        tmp.renameTo(file)
+    }
+
+    /** Kopiert ein gewähltes Bild als kleines JPEG in den Avatar-Ordner. Gibt den Dateinamen zurück. */
+    fun importAvatar(uri: Uri, characterId: String): String? = runCatching {
+        val bitmap = context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it) }
+            ?: return null
+        val side = 512
+        val scale = side.toFloat() / minOf(bitmap.width, bitmap.height)
+        val scaled = Bitmap.createScaledBitmap(
+            bitmap, (bitmap.width * scale).toInt().coerceAtLeast(1), (bitmap.height * scale).toInt().coerceAtLeast(1), true,
+        )
+        // Quadratisch zuschneiden (Mitte), passt zum runden Avatar
+        val x = (scaled.width - side).coerceAtLeast(0) / 2
+        val y = (scaled.height - side).coerceAtLeast(0) / 2
+        val square = Bitmap.createBitmap(scaled, x, y, minOf(side, scaled.width), minOf(side, scaled.height))
+        val name = "$characterId-${System.currentTimeMillis()}.jpg"
+        File(avatarDir, name).outputStream().use { square.compress(Bitmap.CompressFormat.JPEG, 90, it) }
+        name
+    }.getOrNull()
+
+    /** Nach dem Erteilen der Erlaubnis: Figuren aus dem App-Ordner in /CharacterFun übernehmen. */
+    private fun moveInternalToShared() {
+        if (!hasSharedStorage()) return
+        val oldFile = File(internalDir, "figuren.json")
+        if (!oldFile.exists()) return
+        sharedDir.mkdirs()
+        val newFile = File(sharedDir, "figuren.json")
+        if (!newFile.exists()) oldFile.copyTo(newFile)
+        File(internalDir, "Avatare").listFiles()?.forEach { img ->
+            val target = File(avatarDir, img.name)
+            if (!target.exists()) img.copyTo(target)
+            img.delete()
+        }
+        oldFile.delete()
+    }
+}
