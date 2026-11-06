@@ -64,3 +64,37 @@ object PromptBuilder {
         )
     }
 }
+
+/** Fünf Ideen, was du als Nächstes schreiben könntest. */
+object ReplySuggestions {
+
+    const val SYSTEM =
+        "Du hilfst einem Nutzer in einem Rollenspiel-Chat mit Ideen für seine nächste Nachricht. " +
+            "Du antwortest ausschließlich mit einem JSON-Array aus Strings, ohne Erklärung, ohne Markdown."
+
+    fun prompt(characterName: String, aboutUser: String, recent: List<ChatMessage>): String = buildString {
+        appendLine("Hier ist das Ende eines Chats zwischen dem Nutzer und der Figur \"$characterName\":")
+        appendLine()
+        recent.forEach { m -> appendLine("${if (m.fromUser) "Nutzer" else characterName}: ${m.text.trim()}") }
+        appendLine()
+        if (aboutUser.isNotBlank()) appendLine("Über den Nutzer: ${aboutUser.trim()}")
+        appendLine("Schlage genau fünf mögliche nächste Nachrichten des NUTZERS an $characterName vor, auf Deutsch, je höchstens 20 Wörter.")
+        appendLine("Mach sie unterschiedlich: eine neugierige Frage, eine freche oder witzige Antwort, eine gefühlvolle Antwort,")
+        appendLine("eine Handlung zwischen Sternchen (z. B. *schaut sich misstrauisch um*) und eine, die die Geschichte in eine neue Richtung lenkt.")
+        append("Format: [\"…\", \"…\", \"…\", \"…\", \"…\"]")
+    }
+
+    /** Holt die Vorschläge aus der Antwort – zur Not Zeile für Zeile. */
+    fun parse(answer: String): List<String> {
+        val start = answer.indexOf('[')
+        val end = answer.lastIndexOf(']')
+        val list = if (start >= 0 && end > start) {
+            runCatching {
+                val arr = org.json.JSONArray(answer.substring(start, end + 1))
+                List(arr.length()) { arr.optString(it) }
+            }.getOrNull()
+        } else null
+        val raw = list ?: answer.lines().map { it.trim().trimStart('-', '•', '*', ' ').replaceFirst(Regex("^\\d+[.)]\\s*"), "") }
+        return raw.map { it.trim().trim('"') }.filter { it.length in 2..300 }.distinct().take(5)
+    }
+}

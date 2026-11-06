@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.Casino
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.AlertDialog
@@ -153,8 +154,32 @@ fun ChatScreen(vm: AppViewModel) {
             EngineOverlay(vm, Modifier.align(Alignment.Center))
         }
 
-        // Gesprächsstarter, solange noch nichts geschrieben wurde
-        if (vm.chatReady && vm.messages.none { it.fromUser } && c.starters.isNotEmpty()) {
+        var input by rememberSaveable { mutableStateOf("") }
+
+        // Ideen von der KI: Tipp setzt den Vorschlag ins Eingabefeld
+        if (vm.suggesting || vm.suggestions.isNotEmpty()) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (vm.suggesting) {
+                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.width(10.dp))
+                    Text("Gemma sammelt Ideen …", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                } else {
+                    Text("Ideen:", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.width(8.dp))
+                    LazyRow(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(vm.suggestions) { idea ->
+                            SuggestionChip(
+                                onClick = { input = idea; vm.clearSuggestions() },
+                                label = { Text(roleplayText(idea), maxLines = 2) },
+                                modifier = Modifier.widthIn(max = 320.dp),
+                            )
+                        }
+                    }
+                    IconButton(onClick = { vm.clearSuggestions() }) { Icon(Icons.Default.Close, "Ideen schließen") }
+                }
+            }
+        } else if (vm.chatReady && vm.messages.none { it.fromUser } && c.starters.isNotEmpty()) {
+            // Gesprächsstarter, solange noch nichts geschrieben wurde
             LazyRow(
                 contentPadding = PaddingValues(horizontal = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -162,7 +187,7 @@ fun ChatScreen(vm: AppViewModel) {
                 items(c.starters) { s -> SuggestionChip(onClick = { vm.send(s) }, label = { Text(s) }) }
             }
         }
-        InputBar(vm, c)
+        InputBar(vm, c, input) { input = it }
     }
 }
 
@@ -308,29 +333,35 @@ private fun roleplayText(text: String): androidx.compose.ui.text.AnnotatedString
 }
 
 @Composable
-private fun InputBar(vm: AppViewModel, c: Character) {
-    var text by rememberSaveable { mutableStateOf("") }
+private fun InputBar(vm: AppViewModel, c: Character, text: String, onText: (String) -> Unit) {
     Row(
         Modifier.fillMaxWidth().padding(16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         OutlinedTextField(
             value = text,
-            onValueChange = { text = it },
+            onValueChange = onText,
             placeholder = { Text("Nachricht an ${c.name} …") },
             enabled = vm.chatReady,
             modifier = Modifier.weight(1f),
             maxLines = 5,
             shape = RoundedCornerShape(24.dp),
         )
-        Spacer(Modifier.width(10.dp))
+        Spacer(Modifier.width(6.dp))
+        // Ideen-Knopf: Gemma schlägt fünf mögliche nächste Nachrichten vor
+        IconButton(
+            onClick = { vm.suggestReplies() },
+            enabled = vm.chatReady && !vm.isGenerating && !vm.suggesting,
+            modifier = Modifier.size(52.dp),
+        ) { Icon(Icons.Default.Lightbulb, "Ideen für meine Antwort", tint = MaterialTheme.colorScheme.secondary) }
+        Spacer(Modifier.width(6.dp))
         if (vm.isGenerating) {
             FilledIconButton(onClick = { vm.stop() }, modifier = Modifier.size(52.dp)) {
                 Icon(Icons.Default.Stop, "Stopp")
             }
         } else {
             FilledIconButton(
-                onClick = { vm.send(text); text = "" },
+                onClick = { vm.send(text); onText("") },
                 enabled = vm.chatReady && text.isNotBlank(),
                 modifier = Modifier.size(52.dp),
             ) { Icon(Icons.AutoMirrored.Filled.Send, "Senden") }

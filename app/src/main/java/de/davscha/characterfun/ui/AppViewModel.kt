@@ -18,6 +18,7 @@ import de.davscha.characterfun.data.SavedChat
 import de.davscha.characterfun.data.CharacterRepository
 import de.davscha.characterfun.data.PromptBuilder
 import de.davscha.characterfun.data.ProfileGenerator
+import de.davscha.characterfun.data.ReplySuggestions
 import de.davscha.characterfun.engine.Accelerator
 import de.davscha.characterfun.engine.ChatEngine
 import de.davscha.characterfun.engine.LiteRtEngine
@@ -408,6 +409,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         stop()
         chatCharacter = c
         messages.clear()
+        suggestions.clear()
         val saved = repo.loadChat(c.id)
         if (saved != null && saved.messages.isNotEmpty()) messages.addAll(saved.messages)
         else if (c.greeting.isNotBlank()) messages += ChatMessage.bot(c.greeting)
@@ -551,7 +553,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun send(text: String) {
         val input = text.trim()
-        if (input.isEmpty() || isGenerating || !chatReady) return
+        if (input.isEmpty() || isGenerating || suggesting || !chatReady) return
+        suggestions.clear()
         val historyBefore = messages.toList()
         messages += ChatMessage.user(input)
         messages += ChatMessage.bot("")
@@ -560,7 +563,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Neue Variante für die letzte Antwort der Figur. */
     fun regenerate() {
-        if (isGenerating || !chatReady || messages.size < 2) return
+        if (isGenerating || suggesting || !chatReady || messages.size < 2) return
+        suggestions.clear()
         val last = messages.last()
         val userMsg = messages[messages.lastIndex - 1]
         if (last.fromUser || !userMsg.fromUser) return
@@ -624,6 +628,46 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (isGenerating) needsRebuild = true
         engine.stop()
     }
+
+    // ---------- Antwortvorschläge ----------
+
+    /** Fünf Ideen für deine nächste Nachricht (leer = keine angezeigt) */
+    val suggestions = mutableStateListOf<String>()
+    var suggesting by mutableStateOf(false)
+        private set
+
+    /** Lässt Gemma fünf mögliche nächste Nachrichten für dich schreiben. */
+    fun suggestReplies() {
+        val c = chatCharacter ?: return
+        if (suggesting || isGenerating || !chatReady) return
+        suggesting = true
+        suggestions.clear()
+        // Die letzten Nachrichten reichen – grob 3000 Zeichen
+        val recent = ArrayDeque<ChatMessage>()
+        var chars = 0
+        for (m in messages.asReversed()) {
+            if (chars + m.text.length > 3000 && recent.isNotEmpty()) break
+            recent.addFirst(m)
+            chars += m.text.length
+        }
+        viewModelScope.launch {
+            try {
+                withContext(Dispatchers.IO) { engine.startConversation(ReplySuggestions.SYSTEM, emptyList(), 0.9) }
+                needsRebuild = true // das Chat-Gespräch wird vor der nächsten Nachricht neu aufgebaut
+                val sb = StringBuilder()
+                engine.send(ReplySuggestions.prompt(c.name, aboutUser, recent.toList())).collect { sb.append(it) }
+                suggestions.addAll(ReplySuggestions.parse(sb.toString()))
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Keine Vorschläge – nicht schlimm
+            } finally {
+                suggesting = false
+            }
+        }
+    }
+
+    fun clearSuggestions() = suggestions.clear()
 
     // ---------- Figur mit KI erstellen ----------
 
