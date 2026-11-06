@@ -527,6 +527,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun stop() {
+        // Nach einem Abbruch steckt eine halbe Antwort im Modell – vor der nächsten Nachricht neu aufbauen
+        if (isGenerating) needsRebuild = true
         engine.stop()
     }
 
