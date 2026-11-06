@@ -500,7 +500,18 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         // Was vorne herausfällt und noch nicht zusammengefasst ist, fasst Gemma jetzt zusammen
         val dropped = history.size - kept.size
         if (summarizedUpTo > history.size) summarizedUpTo = history.size // z. B. nach Neu würfeln
-        if (dropped > summarizedUpTo) summarize(c, history.subList(summarizedUpTo, dropped), dropped)
+        // In Häppchen, damit auch ein sehr langer alter Chat ins Gedächtnis des Modells passt
+        while (dropped > summarizedUpTo) {
+            var end = summarizedUpTo
+            var size = 0
+            while (end < dropped && (end == summarizedUpTo || size + history[end].text.length < HISTORY_CHARS)) {
+                size += history[end].text.length
+                end++
+            }
+            val before = summarizedUpTo
+            summarize(c, history.subList(summarizedUpTo, end), end)
+            if (summarizedUpTo == before) break // Zusammenfassen hat nicht geklappt – ohne weiter
+        }
         val prompt = PromptBuilder.build(c, aboutUser, memories.toList(), summary)
         withContext(Dispatchers.IO) {
             engine.startConversation(prompt, kept.map { it.fromUser to it.text }, temperature)
