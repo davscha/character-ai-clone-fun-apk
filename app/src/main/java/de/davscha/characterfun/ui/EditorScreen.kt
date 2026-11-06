@@ -3,12 +3,14 @@ package de.davscha.characterfun.ui
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
@@ -16,13 +18,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -35,10 +40,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -95,6 +102,11 @@ fun EditorScreen(vm: AppViewModel, characterId: String?) {
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Column(Modifier.widthIn(max = 760.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                AiBox(vm, c) { generated ->
+                    c = generated
+                    starters = (generated.starters + List(3) { "" }).take(3)
+                }
+
                 // Avatar
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Avatar(c, vm.repo.avatar(c), size = 96.dp)
@@ -194,4 +206,78 @@ private fun Field(label: String, value: String, hint: String, minLines: Int = 1,
         minLines = minLines,
         modifier = Modifier.fillMaxWidth(),
     )
+}
+
+/** "Mit KI erstellen": Stichpunkte rein, fertiges Profil raus – danach lässt sich alles anpassen. */
+@Composable
+private fun AiBox(vm: AppViewModel, current: Character, onGenerated: (Character) -> Unit) {
+    var notes by rememberSaveable { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    var progress by remember { mutableStateOf(0) }
+    var error by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.AutoAwesome, null, tint = MaterialTheme.colorScheme.primary)
+            Spacer(Modifier.width(8.dp))
+            Text("Mit KI erstellen", fontWeight = FontWeight.SemiBold)
+        }
+        Text(
+            "Ein paar Stichpunkte genügen – die KI schreibt Name, Begrüßung, Persönlichkeit und Gesprächsstarter. " +
+                "Vorhandene Felder werden überschrieben.",
+            fontSize = 13.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        OutlinedTextField(
+            value = notes,
+            onValueChange = { notes = it },
+            placeholder = { Text("z. B. mürrischer Zwerg, Schmied, liebt Bier und Rätsel, berlinert") },
+            enabled = !busy,
+            minLines = 2,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Button(
+                onClick = {
+                    error = null
+                    busy = true
+                    progress = 0
+                    scope.launch {
+                        try {
+                            onGenerated(vm.generateProfile(notes, current) { progress = it })
+                        } catch (e: kotlinx.coroutines.CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            error = e.message ?: "Das hat nicht geklappt."
+                        } finally {
+                            busy = false
+                        }
+                    }
+                },
+                enabled = notes.isNotBlank() && !busy,
+            ) { Text(if (current.definition.isBlank()) "Profil erstellen" else "Neu erstellen") }
+            Spacer(Modifier.width(12.dp))
+            if (busy) {
+                CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    when {
+                        vm.engineState is EngineState.Loading -> "Modell wird geladen …"
+                        progress == 0 -> "Die KI denkt nach …"
+                        else -> "Die KI schreibt … ($progress Zeichen)"
+                    },
+                    fontSize = 13.sp,
+                )
+            }
+        }
+        error?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 13.sp) }
+    }
 }

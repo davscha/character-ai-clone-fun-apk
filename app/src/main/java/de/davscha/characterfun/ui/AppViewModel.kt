@@ -17,6 +17,7 @@ import de.davscha.characterfun.data.ChatMessage
 import de.davscha.characterfun.data.SavedChat
 import de.davscha.characterfun.data.CharacterRepository
 import de.davscha.characterfun.data.PromptBuilder
+import de.davscha.characterfun.data.ProfileGenerator
 import de.davscha.characterfun.engine.Accelerator
 import de.davscha.characterfun.engine.ChatEngine
 import de.davscha.characterfun.engine.LiteRtEngine
@@ -530,6 +531,35 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         // Nach einem Abbruch steckt eine halbe Antwort im Modell – vor der nächsten Nachricht neu aufbauen
         if (isGenerating) needsRebuild = true
         engine.stop()
+    }
+
+    // ---------- Figur mit KI erstellen ----------
+
+    /**
+     * Lässt das Modell aus Stichpunkten ein Profil schreiben. [onProgress] bekommt die Zahl der
+     * bisher geschriebenen Zeichen. Das Chat-Gespräch wird danach beim nächsten Senden neu aufgebaut.
+     */
+    suspend fun generateProfile(notes: String, base: Character, onProgress: (Int) -> Unit): Character {
+        val model = selectedModel
+        require(downloads[model.id] == DownloadState.Done) { "${model.title} ist noch nicht heruntergeladen (Seite \"Modelle\")." }
+        check(!isGenerating) { "Es läuft gerade noch eine Antwort." }
+        if (preparing) chatJob?.join()
+        ensureModelLoaded(model)
+        withContext(Dispatchers.IO) {
+            engine.startConversation(ProfileGenerator.SYSTEM_PROMPT, emptyList(), 0.8)
+        }
+        needsRebuild = true
+        val answer = StringBuilder()
+        try {
+            engine.send(ProfileGenerator.prompt(notes)).collect { chunk ->
+                answer.append(chunk)
+                onProgress(answer.length)
+            }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            engine.stop() // Editor verlassen: Modell nicht weiterschreiben lassen
+            throw e
+        }
+        return ProfileGenerator.parse(answer.toString(), base)
     }
 
     // ---------- Gespeicherte Chats ----------
