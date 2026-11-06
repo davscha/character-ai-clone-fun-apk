@@ -6,6 +6,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.LaunchedEffect
 import de.davscha.characterfun.ui.CharacterFunTheme
 import de.davscha.characterfun.ui.TestChatScreen
@@ -25,7 +27,10 @@ class MainActivity : ComponentActivity() {
                 if (busy) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
                 else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             }
-            CharacterFunTheme { TestChatScreen(viewModel) }
+            CharacterFunTheme {
+                // Surface setzt die helle Schriftfarbe für alle Texte darin
+                Surface(color = MaterialTheme.colorScheme.background) { TestChatScreen(viewModel) }
+            }
         }
     }
 }
