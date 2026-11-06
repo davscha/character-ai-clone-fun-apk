@@ -15,6 +15,13 @@ enum class Category(val label: String) {
     SONSTIGES("Sonstiges"),
 }
 
+/** Wie lang die Figur antwortet */
+enum class ReplyLength(val label: String, val rule: String) {
+    KURZ("Kurz", "Antworte sehr knapp: höchstens zwei kurze Sätze."),
+    MITTEL("Mittel", "Antworte wie in einem Chat: höchstens vier kurze Sätze."),
+    LANG("Lang", "Antworte ausführlich mit fünf bis acht Sätzen und beschreibe dabei auch die Szene."),
+}
+
 /** Eine Figur – alle Felder aus dem character.ai-Editor, die für die App Sinn ergeben. */
 data class Character(
     val id: String = UUID.randomUUID().toString(),
@@ -36,6 +43,11 @@ data class Character(
     val starters: List<String> = emptyList(),
     /** true = mitgelieferte Beispiel-Figur */
     val builtIn: Boolean = false,
+    /** Ausgangssituation, in der das Gespräch beginnt (optional) */
+    val scenario: String = "",
+    val replyLength: ReplyLength = ReplyLength.MITTEL,
+    /** Id des Lieblingsmodells; leer = das Modell aus den Einstellungen */
+    val preferredModelId: String = "",
 ) {
     fun toJson(): JSONObject = JSONObject()
         .put("id", id)
@@ -49,6 +61,9 @@ data class Character(
         .put("greeting", greeting)
         .put("starters", JSONArray(starters))
         .put("builtIn", builtIn)
+        .put("scenario", scenario)
+        .put("replyLength", replyLength.name)
+        .put("preferredModel", preferredModelId)
 
     companion object {
         fun fromJson(o: JSONObject) = Character(
@@ -64,6 +79,9 @@ data class Character(
             starters = o.optJSONArray("starters")?.let { a -> List(a.length()) { a.optString(it) } }
                 ?.filter { it.isNotBlank() } ?: emptyList(),
             builtIn = o.optBoolean("builtIn"),
+            scenario = o.optString("scenario"),
+            replyLength = runCatching { ReplyLength.valueOf(o.optString("replyLength")) }.getOrDefault(ReplyLength.MITTEL),
+            preferredModelId = o.optString("preferredModel"),
         )
     }
 }

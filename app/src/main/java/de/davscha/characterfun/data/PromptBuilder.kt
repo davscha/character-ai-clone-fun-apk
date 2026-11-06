@@ -23,6 +23,10 @@ object PromptBuilder {
             appendLine()
             appendLine("Hintergrund: ${c.longDescription.trim()}")
         }
+        if (c.scenario.isNotBlank()) {
+            appendLine()
+            appendLine("Ausgangssituation des Gesprächs: ${c.scenario.trim()}")
+        }
         if (aboutUser.isNotBlank()) {
             appendLine()
             appendLine("Über dein Gegenüber im Chat: ${aboutUser.trim()}")
@@ -39,7 +43,7 @@ object PromptBuilder {
         appendLine()
         appendLine("Regeln:")
         appendLine("- Bleib immer in der Rolle von ${c.name} und gib nie zu, eine KI zu sein.")
-        appendLine("- Antworte wie in einem Chat: höchstens vier kurze Sätze, keine Aufzählungen, keine Überschriften.")
+        appendLine("- ${c.replyLength.rule} Keine Aufzählungen, keine Überschriften.")
         appendLine("- Antworte auf Deutsch, außer deine Beschreibung sagt etwas anderes.")
         append("- Handlungen und Gesten schreibst du zwischen Sternchen, z. B. *grinst*.")
     }

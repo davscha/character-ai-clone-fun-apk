@@ -25,6 +25,7 @@ object ProfileGenerator {
           "begruessung": "der erste Satz der Figur im Chat, in ihrem typischen Tonfall",
           "definition": "4 bis 6 kurze Sätze in Du-Form (Du bist …): wie die Figur denkt, redet und sich verhält, mit typischen Ausdrücken",
           "hintergrund": "2 bis 3 Sätze zu Aussehen und Vorgeschichte",
+          "szene": "ein Satz zur Ausgangssituation, in der das Gespräch beginnt (z. B. wo man sich trifft)",
           "starter": ["Satz 1", "Satz 2", "Satz 3"]
         }
         Wichtig zu "starter": Das sind drei kurze Sätze, die der NUTZER zur Figur sagt, um das Gespräch zu beginnen –
@@ -55,6 +56,7 @@ object ProfileGenerator {
             greeting = field("begruessung", base.greeting),
             definition = field("definition", base.definition),
             longDescription = field("hintergrund", base.longDescription),
+            scenario = field("szene", base.scenario),
             starters = starters?.ifEmpty { null } ?: base.starters,
         )
     }

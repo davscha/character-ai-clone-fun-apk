@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Casino
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Refresh
@@ -85,6 +86,36 @@ fun ChatScreen(vm: AppViewModel) {
     var confirmRestart by remember { mutableStateOf(false) }
     var showMemories by remember { mutableStateOf(false) }
     if (showMemories) MemoriesDialog(vm, c) { showMemories = false }
+
+    // Nachricht bearbeiten
+    var editIndex by remember { mutableStateOf(-1) }
+    var editText by remember { mutableStateOf("") }
+    if (editIndex in vm.messages.indices) {
+        val fromUser = vm.messages[editIndex].fromUser
+        AlertDialog(
+            onDismissRequest = { editIndex = -1 },
+            title = { Text("Nachricht bearbeiten") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (fromUser && editIndex < vm.messages.lastIndex) {
+                        Text(
+                            "Alles nach dieser Nachricht fällt weg, ${c.name} antwortet neu.",
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    OutlinedTextField(value = editText, onValueChange = { editText = it }, modifier = Modifier.fillMaxWidth(), maxLines = 8)
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = { vm.editMessage(editIndex, editText); editIndex = -1 },
+                    enabled = editText.isNotBlank(),
+                ) { Text(if (fromUser) "Senden" else "Speichern") }
+            },
+            dismissButton = { TextButton(onClick = { editIndex = -1 }) { Text("Abbrechen") } },
+        )
+    }
     if (confirmRestart) {
         AlertDialog(
             onDismissRequest = { confirmRestart = false },
@@ -143,12 +174,31 @@ fun ChatScreen(vm: AppViewModel) {
                         modifier = Modifier.padding(bottom = 8.dp),
                     )
                 }
+                if (c.scenario.isNotBlank()) {
+                    item {
+                        // Startszene wie eine Regieanweisung über dem Gespräch
+                        Text(
+                            c.scenario,
+                            fontSize = 14.sp,
+                            fontStyle = FontStyle.Italic,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.widthIn(max = 560.dp).padding(bottom = 8.dp),
+                        )
+                    }
+                }
                 itemsIndexed(vm.messages) { i, msg ->
                     val isLast = i == vm.messages.lastIndex
                     val streaming = vm.isGenerating && isLast
                     // Neu würfeln geht bei der letzten Antwort, wenn davor eine Nachricht von dir steht
                     val canReroll = isLast && !msg.fromUser && i > 0 && vm.messages[i - 1].fromUser
-                    MessageBubble(c, avatarFile, msg, streaming, if (canReroll) vm else null, vm.summarizing, onPin = { vm.addMemory(msg.text) })
+                    MessageBubble(
+                        c, avatarFile, msg, streaming, if (canReroll) vm else null, vm.summarizing,
+                        busy = vm.isGenerating || vm.suggesting,
+                        onPin = { vm.addMemory(msg.text) },
+                        onEdit = { editText = msg.text; editIndex = i },
+                        onDelete = { vm.deleteMessage(i) },
+                    )
                 }
             }
             EngineOverlay(vm, Modifier.align(Alignment.Center))
@@ -231,7 +281,7 @@ private fun EngineOverlay(vm: AppViewModel, modifier: Modifier) {
             }
             else -> {
                 Text("Das Modell ist nicht geladen.", textAlign = TextAlign.Center)
-                Button(onClick = { vm.retryChat() }) { Text("${vm.selectedModel.title} laden") }
+                Button(onClick = { vm.retryChat() }) { Text("${vm.chatModel.title} laden") }
             }
         }
     }
@@ -247,7 +297,10 @@ private fun MessageBubble(
     /** nur bei der letzten Antwort gesetzt: dann gibt es Neu würfeln und Varianten-Pfeile */
     rerollVm: AppViewModel?,
     summarizing: Boolean,
+    busy: Boolean,
     onPin: () -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     Row(
@@ -286,6 +339,18 @@ private fun MessageBubble(
                         text = { Text("Als Erinnerung anheften") },
                         leadingIcon = { Icon(Icons.Default.PushPin, null) },
                         onClick = { menuOpen = false; onPin() },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Bearbeiten") },
+                        leadingIcon = { Icon(Icons.Default.Edit, null) },
+                        enabled = !busy,
+                        onClick = { menuOpen = false; onEdit() },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Löschen", color = MaterialTheme.colorScheme.error) },
+                        leadingIcon = { Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error) },
+                        enabled = !busy,
+                        onClick = { menuOpen = false; onDelete() },
                     )
                 }
             }

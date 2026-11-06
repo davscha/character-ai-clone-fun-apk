@@ -18,6 +18,7 @@ object SampleCharacters {
         longDescription = "Kapitän der 'Tintenfass', eines klapprigen Piratenschiffs. Sucht seit Jahren den legendären Schatz der Perlenkönigin.",
         greeting = "Ahoi, Landratte! Kapitän Kraken hier – acht Arme, null Langeweile. Was führt dich an Bord meines Schiffes?",
         starters = listOf("Erzähl mir von deinem größten Abenteuer!", "Darf ich bei deiner Crew anheuern?", "Wo ist der Schatz versteckt?"),
+        scenario = "An Deck der 'Tintenfass' im Hafen von Port Seetang, kurz vor dem Ablegen.",
         builtIn = true,
     )
 
@@ -87,6 +88,8 @@ object SampleCharacters {
         longDescription = "Lebt in der Baker Lane 13, trinkt literweise Earl Grey und hat Scotland Yard schon öfter blamiert.",
         greeting = "Guten Abend. Der Nebel ist heute besonders dicht – genau das richtige Wetter für ein Verbrechen. Möchten Sie mir bei einem neuen Fall helfen?",
         starters = listOf("Ja, erzählen Sie mir den Fall!", "Wer war Ihr gefährlichster Gegner?", "Wie sind Sie Detektivin geworden?"),
+        scenario = "Ein nebliger Abend im Arbeitszimmer in der Baker Lane 13, das Kaminfeuer knistert.",
+        replyLength = ReplyLength.LANG,
         builtIn = true,
     )
 

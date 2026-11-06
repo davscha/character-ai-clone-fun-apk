@@ -51,6 +51,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import de.davscha.characterfun.data.Category
 import de.davscha.characterfun.data.Character
+import de.davscha.characterfun.data.ReplyLength
+import de.davscha.characterfun.model.ModelCatalog
 import kotlinx.coroutines.launch
 
 /** Figur erstellen oder bearbeiten – die Felder wie im character.ai-Editor. */
@@ -153,6 +155,11 @@ fun EditorScreen(vm: AppViewModel, characterId: String?) {
                 ) { c = c.copy(greeting = it) }
 
                 Field(
+                    "Startszene (optional)", c.scenario,
+                    "Wo und wie beginnt das Gespräch? z. B. \"Nachts in einer verrauchten Hafenkneipe\"", minLines = 2,
+                ) { c = c.copy(scenario = it) }
+
+                Field(
                     "Definition (Persönlichkeit)", c.definition,
                     "Wie denkt, redet und verhält sich die Figur? Kurze, klare Sätze funktionieren am besten.",
                     minLines = 5,
@@ -162,6 +169,30 @@ fun EditorScreen(vm: AppViewModel, characterId: String?) {
                     "Hintergrund (optional)", c.longDescription,
                     "Aussehen, Vorgeschichte, Umgebung …", minLines = 3,
                 ) { c = c.copy(longDescription = it) }
+
+                Text("Antwortlänge", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ReplyLength.entries.forEach { len ->
+                        FilterChip(selected = c.replyLength == len, onClick = { c = c.copy(replyLength = len) }, label = { Text(len.label) })
+                    }
+                }
+
+                Text("Lieblingsmodell", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(
+                        selected = c.preferredModelId.isEmpty(),
+                        onClick = { c = c.copy(preferredModelId = "") },
+                        label = { Text("Wie in den Einstellungen") },
+                    )
+                    ModelCatalog.all.forEach { m ->
+                        val ready = vm.downloads[m.id] == DownloadState.Done
+                        FilterChip(
+                            selected = c.preferredModelId == m.id,
+                            onClick = { c = c.copy(preferredModelId = m.id) },
+                            label = { Text(if (ready) m.title else "${m.title} (nicht geladen)") },
+                        )
+                    }
+                }
 
                 Text("Gesprächsstarter (optional)", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 starters.forEachIndexed { i, s ->

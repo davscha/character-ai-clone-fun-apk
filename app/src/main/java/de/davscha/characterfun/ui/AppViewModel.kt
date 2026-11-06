@@ -330,8 +330,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun saveCharacter(c: Character) {
         val i = characters.indexOfFirst { it.id == c.id }
         if (i >= 0) characters[i] = c else characters.add(0, c)
-        // Im Chat gilt die neue Fassung ab dem nächsten "Neues Gespräch"
-        if (chatCharacter?.id == c.id) chatCharacter = c
+        // Im offenen Chat gilt die neue Fassung ab der nächsten Nachricht
+        if (chatCharacter?.id == c.id) {
+            chatCharacter = c
+            needsRebuild = true
+            val loaded = (engineState as? EngineState.Ready)?.model
+            if (loaded != null && loaded != chatModel) prepareConversation() // Lieblingsmodell geändert
+        }
         persist()
     }
 
@@ -447,9 +452,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun retryChat() = prepareConversation()
 
     /** Lädt bei Bedarf das Modell und baut das Gespräch aus dem Verlauf auf. */
+    /**
+     * Das Modell für den aktuellen Chat: das Lieblingsmodell der Figur, falls heruntergeladen,
+     * sonst das aus den Einstellungen.
+     */
+    val chatModel: ModelInfo
+        get() = chatCharacter?.preferredModelId
+            ?.let { id -> allModels.firstOrNull { it.id == id } }
+            ?.takeIf { downloads[it.id] == DownloadState.Done }
+            ?: selectedModel
+
     private fun prepareConversation() {
         val c = chatCharacter ?: return
-        val model = selectedModel
+        val model = chatModel
         if (downloads[model.id] != DownloadState.Done) {
             engineState = EngineState.Failed("${model.title} ist noch nicht heruntergeladen.")
             return
@@ -559,6 +574,43 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         messages += ChatMessage.user(input)
         messages += ChatMessage.bot("")
         generateInto(messages.lastIndex, input, historyBefore)
+    }
+
+    // ---------- Nachrichten bearbeiten und löschen ----------
+
+    /**
+     * Ändert eine Nachricht. Bei deiner eigenen Nachricht fällt alles danach weg und die Figur
+     * antwortet neu; bei einer Antwort der Figur wird nur der Text ersetzt.
+     */
+    fun editMessage(index: Int, newText: String) {
+        val t = newText.trim()
+        if (t.isEmpty() || isGenerating || suggesting || index !in messages.indices) return
+        val msg = messages[index]
+        suggestions.clear()
+        if (msg.fromUser) {
+            if (!chatReady) return
+            val historyBefore = messages.subList(0, index).toList()
+            while (messages.size > index) messages.removeAt(messages.lastIndex)
+            if (summarizedUpTo > index) summarizedUpTo = index
+            messages += ChatMessage.user(t)
+            messages += ChatMessage.bot("")
+            needsRebuild = true
+            generateInto(messages.lastIndex, t, historyBefore)
+        } else {
+            messages[index] = msg.withText(t).copy(stats = null)
+            needsRebuild = true
+            saveChat()
+        }
+    }
+
+    /** Löscht eine einzelne Nachricht. */
+    fun deleteMessage(index: Int) {
+        if (isGenerating || suggesting || index !in messages.indices) return
+        messages.removeAt(index)
+        if (index < summarizedUpTo) summarizedUpTo--
+        suggestions.clear()
+        needsRebuild = true
+        saveChat()
     }
 
     /** Neue Variante für die letzte Antwort der Figur. */
@@ -711,7 +763,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             c.id, System.currentTimeMillis(), messages.toList(),
             memories = memories.toList(), summary = summary, summarizedUpTo = summarizedUpTo,
         )
-        if (chat.messages.none { it.fromUser } && chat.memories.isEmpty()) return
+        if (chat.messages.none { it.fromUser } && chat.memories.isEmpty()) {
+            // Nichts mehr übrig (z. B. alles gelöscht) – gespeicherten Chat entfernen
+            repo.deleteChat(c.id)
+            recentChats.removeAll { it.characterId == c.id }
+            return
+        }
         viewModelScope.launch {
             withContext(Dispatchers.IO) { repo.saveChat(chat) }
             recentChats.removeAll { it.characterId == c.id }
