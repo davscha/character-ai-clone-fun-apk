@@ -1,6 +1,8 @@
 package de.davscha.characterfun.ui
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,10 +24,15 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilterChip
@@ -39,10 +46,12 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -174,13 +183,33 @@ private fun modelLine(vm: AppViewModel): String = when (val s = vm.engineState) 
     else "Noch kein Modell – oben rechts unter \"Modelle\" herunterladen"
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun CharacterCard(vm: AppViewModel, c: Character) {
+    var menuOpen by remember { mutableStateOf(false) }
+    var confirmDelete by remember { mutableStateOf(false) }
+    if (confirmDelete) {
+        AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text("${c.name} löschen?") },
+            text = { Text("Die Figur und das Gespräch mit ihr sind danach weg.") },
+            confirmButton = {
+                TextButton(onClick = { confirmDelete = false; vm.deleteCharacter(c.id) }) {
+                    Text("Löschen", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Abbrechen") } },
+        )
+    }
     Card(
-        onClick = { vm.openChat(c) },
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-        modifier = Modifier.fillMaxWidth().height(236.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(236.dp)
+            .clip(RoundedCornerShape(16.dp))
+            // Tippen = Chat, lange drücken = Menü
+            .combinedClickable(onClick = { vm.openChat(c) }, onLongClick = { menuOpen = true }),
     ) {
         Box(Modifier.fillMaxSize()) {
             Column(
@@ -207,10 +236,23 @@ private fun CharacterCard(vm: AppViewModel, c: Character) {
                     color = MaterialTheme.colorScheme.primary,
                 )
             }
-            IconButton(
-                onClick = { vm.navigate(Screen.Editor(c.id)) },
-                modifier = Modifier.align(Alignment.TopEnd),
-            ) { Icon(Icons.Default.Edit, "Bearbeiten", tint = Color.White.copy(alpha = 0.6f)) }
+            Box(Modifier.align(Alignment.TopEnd)) {
+                IconButton(onClick = { menuOpen = true }) {
+                    Icon(Icons.Default.MoreVert, "Mehr", tint = Color.White.copy(alpha = 0.6f))
+                }
+                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    DropdownMenuItem(
+                        text = { Text("Bearbeiten") },
+                        leadingIcon = { Icon(Icons.Default.Edit, null) },
+                        onClick = { menuOpen = false; vm.navigate(Screen.Editor(c.id)) },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Löschen", color = MaterialTheme.colorScheme.error) },
+                        leadingIcon = { Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error) },
+                        onClick = { menuOpen = false; confirmDelete = true },
+                    )
+                }
+            }
         }
     }
 }
