@@ -56,6 +56,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import de.davscha.characterfun.engine.OllamaModel
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.MenuAnchorType
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.FilterChip
@@ -201,36 +207,59 @@ private fun OllamaSettings(vm: AppViewModel) {
         if (ok.models.isEmpty()) {
             Text("Auf dem PC ist noch kein Modell installiert (z. B. ollama pull gemma4:e4b).", fontSize = 13.sp)
         }
-        ok.models.forEach { m ->
-            val selected = vm.ollamaModel == m.name
-            val shape = RoundedCornerShape(12.dp)
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .clip(shape)
-                    .border(
-                        width = if (selected) 2.dp else 1.dp,
-                        color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
-                        shape = shape,
-                    )
-                    .clickable { vm.selectOllamaModel(m.name) }
-                    .padding(14.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(Modifier.weight(1f)) {
-                    Text(m.name, fontWeight = FontWeight.SemiBold)
-                    Text("%.1f GB".format(m.sizeBytes / 1e9), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Text(
-                    if (m.vision) "Bilder ✓" else "Bilder ✗",
-                    fontSize = 12.sp,
-                    color = if (m.vision) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
+        if (ok.models.isNotEmpty()) OllamaModelPicker(vm, ok.models)
     } ?: run {
         if (vm.ollamaModel.isNotBlank()) {
             Text("Gewähltes Modell: ${vm.ollamaModel}", fontSize = 13.sp)
+        }
+    }
+}
+
+/** Auswahlliste (Combobox) für die Ollama-Modelle – übersichtlich auch bei vielen Modellen. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun OllamaModelPicker(vm: AppViewModel, models: List<OllamaModel>) {
+    var expanded by remember { mutableStateOf(false) }
+    val current = models.firstOrNull { it.name == vm.ollamaModel }
+    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
+        OutlinedTextField(
+            value = current?.name ?: "Modell wählen",
+            onValueChange = {},
+            readOnly = true,
+            label = { Text("Ollama-Modell") },
+            supportingText = {
+                current?.let {
+                    Text("%.1f GB · %s".format(it.sizeBytes / 1e9, if (it.vision) "kann Bilder ✓" else "keine Bilder ✗"))
+                }
+            },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryNotEditable),
+        )
+        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            models.forEach { m ->
+                DropdownMenuItem(
+                    text = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text(m.name, fontWeight = if (m.name == vm.ollamaModel) FontWeight.SemiBold else FontWeight.Normal)
+                                Text("%.1f GB".format(m.sizeBytes / 1e9), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            Spacer(Modifier.width(12.dp))
+                            Text(
+                                if (m.vision) "Bilder ✓" else "Bilder ✗",
+                                fontSize = 12.sp,
+                                color = if (m.vision) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    },
+                    onClick = {
+                        vm.selectOllamaModel(m.name)
+                        expanded = false
+                    },
+                    contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding,
+                )
+            }
         }
     }
 }

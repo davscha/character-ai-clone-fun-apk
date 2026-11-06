@@ -153,8 +153,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 val client = OllamaClient(ollamaHost, ollamaPort)
                 val version = client.version()
                 val models = client.models()
-                // Gewähltes Modell gibt es nicht mehr? Dann das erste nehmen
-                if (models.isNotEmpty() && models.none { it.name == ollamaModel }) selectOllamaModel(models.first().name)
+                // Kein (gültiges) Modell gewählt? Dann ein passendes vorschlagen: Gemma 4 E4B, 12B, irgendein Gemma 4, sonst das kleinste
+                if (models.isNotEmpty() && models.none { it.name == ollamaModel }) {
+                    val pick = models.firstOrNull { it.name.startsWith("gemma4:e4b") }
+                        ?: models.firstOrNull { it.name.startsWith("gemma4:12b") }
+                        ?: models.firstOrNull { it.name.startsWith("gemma4") }
+                        ?: models.minBy { it.sizeBytes }
+                    selectOllamaModel(pick.name)
+                }
                 OllamaStatus.Ok(version, models)
             } catch (e: Exception) {
                 OllamaStatus.Failed(
