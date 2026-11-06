@@ -15,6 +15,10 @@ import de.davscha.characterfun.engine.LiteRtEngine
 import de.davscha.characterfun.model.ModelCatalog
 import de.davscha.characterfun.model.ModelDownloader
 import de.davscha.characterfun.model.ModelInfo
+import de.davscha.characterfun.model.hasSharedStorage
+import de.davscha.characterfun.model.internalModelsDir
+import de.davscha.characterfun.model.sharedModelsDir
+import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -23,6 +27,8 @@ import kotlinx.coroutines.withContext
 sealed interface DownloadState {
     data object Missing : DownloadState
     data class Running(val downloaded: Long, val total: Long) : DownloadState
+    /** Modell wird aus dem internen App-Ordner in den dauerhaften Ordner kopiert */
+    data class Moving(val copied: Long, val total: Long) : DownloadState
     data object Done : DownloadState
     data class Failed(val message: String) : DownloadState
 }
@@ -64,11 +70,61 @@ class TestChatViewModel(app: Application) : AndroidViewModel(app) {
     private val downloadJobs = mutableMapOf<String, Job>()
     private var generateJob: Job? = null
 
-    val isDownloading get() = downloads.values.any { it is DownloadState.Running }
+    val isDownloading get() = downloads.values.any { it is DownloadState.Running || it is DownloadState.Moving }
+
+    /** true = Modelle liegen dauerhaft in /CharacterFun/Modelle */
+    var sharedStorage by mutableStateOf(hasSharedStorage())
+        private set
 
     init {
+        refreshStorage()
+    }
+
+    /** Beim Start und nach Rückkehr aus den Einstellungen: Speicherort prüfen, alte Dateien umziehen. */
+    fun refreshStorage() {
+        sharedStorage = hasSharedStorage()
         ModelCatalog.all.forEach { m ->
-            downloads[m.id] = if (m.isDownloaded(context)) DownloadState.Done else DownloadState.Missing
+            val busy = downloads[m.id] is DownloadState.Running || downloads[m.id] is DownloadState.Moving
+            if (!busy) downloads[m.id] = if (m.isDownloaded(context)) DownloadState.Done else DownloadState.Missing
+        }
+        if (sharedStorage) moveInternalModelsToShared()
+    }
+
+    /** Schon geladene Modelle aus dem internen Ordner übernehmen, statt sie neu herunterzuladen. */
+    private fun moveInternalModelsToShared() {
+        ModelCatalog.all.forEach { m ->
+            val old = File(internalModelsDir(context), m.fileName)
+            val new = m.file(context)
+            if (!old.exists() || new.exists() || downloads[m.id] is DownloadState.Moving) return@forEach
+            if (downloadJobs[m.id]?.isActive == true) return@forEach
+            downloads[m.id] = DownloadState.Moving(0, old.length())
+            downloadJobs[m.id] = viewModelScope.launch {
+                try {
+                    withContext(Dispatchers.IO) {
+                        val tmp = File(new.parentFile, "${m.fileName}.part")
+                        old.inputStream().use { input ->
+                            tmp.outputStream().use { out ->
+                                val buf = ByteArray(1 shl 20)
+                                var copied = 0L
+                                while (true) {
+                                    val n = input.read(buf)
+                                    if (n < 0) break
+                                    out.write(buf, 0, n)
+                                    copied += n
+                                    if (copied % (64L shl 20) < buf.size) {
+                                        withContext(Dispatchers.Main) { downloads[m.id] = DownloadState.Moving(copied, old.length()) }
+                                    }
+                                }
+                            }
+                        }
+                        if (!tmp.renameTo(new)) error("Umbenennen fehlgeschlagen")
+                        old.delete()
+                    }
+                    downloads[m.id] = DownloadState.Done
+                } catch (e: Exception) {
+                    downloads[m.id] = DownloadState.Failed("Umzug fehlgeschlagen: ${e.message}")
+                }
+            }
         }
     }
 
@@ -116,8 +172,10 @@ class TestChatViewModel(app: Application) : AndroidViewModel(app) {
             engineState = EngineState.Idle
             messages.clear()
         }
-        model.file(context).delete()
-        model.partFile(context).delete()
+        listOf(internalModelsDir(context), sharedModelsDir()).forEach { dir ->
+            File(dir, model.fileName).delete()
+            File(dir, "${model.fileName}.part").delete()
+        }
         downloads[model.id] = DownloadState.Missing
     }
 

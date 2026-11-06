@@ -67,6 +67,7 @@ dependencies {
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
 
     // Gemma 4 auf dem Grafikchip (gleiche Version wie Googles AI Edge Gallery)
     implementation("com.google.ai.edge.litertlm:litertlm-android:0.18.1")

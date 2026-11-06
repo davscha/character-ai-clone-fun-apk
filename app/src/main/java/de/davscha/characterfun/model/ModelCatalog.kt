@@ -1,6 +1,7 @@
 package de.davscha.characterfun.model
 
 import android.content.Context
+import android.os.Environment
 import java.io.File
 
 /** Ein mitgeliefertes Modell, das beim ersten Start von Hugging Face geladen wird. */
@@ -18,7 +19,17 @@ data class ModelInfo(
     fun isDownloaded(context: Context) = file(context).let { it.exists() && it.length() > 0 }
 }
 
-fun modelsDir(context: Context) = File(context.filesDir, "models").apply { mkdirs() }
+/** Interner App-Ordner – wird beim Deinstallieren mitgelöscht. */
+fun internalModelsDir(context: Context) = File(context.filesDir, "models").apply { mkdirs() }
+
+/** Dauerhafter Ordner auf dem Tablet – übersteht Neuinstallationen, sichtbar in "Eigene Dateien". */
+fun sharedModelsDir() = File(Environment.getExternalStorageDirectory(), "CharacterFun/Modelle")
+
+/** Mit Erlaubnis "Zugriff auf alle Dateien" der dauerhafte Ordner, sonst der interne. */
+fun hasSharedStorage() = Environment.isExternalStorageManager()
+
+fun modelsDir(context: Context): File =
+    if (hasSharedStorage()) sharedModelsDir().apply { mkdirs() } else internalModelsDir(context)
 
 /**
  * Feste Liste – dieselben Dateien wie in Googles AI Edge Gallery,

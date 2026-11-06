@@ -9,6 +9,7 @@ import androidx.activity.viewModels
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.LaunchedEffect
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import de.davscha.characterfun.ui.CharacterFunTheme
 import de.davscha.characterfun.ui.TestChatScreen
 import de.davscha.characterfun.ui.TestChatViewModel
@@ -26,6 +27,11 @@ class MainActivity : ComponentActivity() {
             LaunchedEffect(busy) {
                 if (busy) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
                 else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            }
+            // Zurück aus den Einstellungen? Dann Speicherort neu prüfen
+            LifecycleResumeEffect(Unit) {
+                viewModel.refreshStorage()
+                onPauseOrDispose { }
             }
             CharacterFunTheme {
                 // Surface setzt die helle Schriftfarbe für alle Texte darin

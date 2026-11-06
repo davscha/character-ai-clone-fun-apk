@@ -1,5 +1,8 @@
 package de.davscha.characterfun.ui
 
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -52,6 +55,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -86,6 +90,7 @@ private fun SidePanel(vm: TestChatViewModel, modifier: Modifier) {
         Text("Modell-Test (Meilenstein 1)", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
 
         SectionTitle("Modell")
+        StorageHint(vm)
         ModelCatalog.all.forEach { model -> ModelCard(vm, model) }
 
         EngineStatus(vm)
@@ -126,6 +131,44 @@ private fun SidePanel(vm: TestChatViewModel, modifier: Modifier) {
             Spacer(Modifier.width(8.dp))
             Text("Neues Gespräch mit dieser Figur")
         }
+    }
+}
+
+/** Bittet um die Erlaubnis, Modelle dauerhaft in /CharacterFun/Modelle zu speichern. */
+@Composable
+private fun StorageHint(vm: TestChatViewModel) {
+    val context = LocalContext.current
+    if (vm.sharedStorage) {
+        Text(
+            "Gespeichert in CharacterFun/Modelle – bleibt auch bei Neuinstallation erhalten.",
+            fontSize = 12.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        return
+    }
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.secondary.copy(alpha = 0.12f))
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text("Modelle dauerhaft speichern", fontWeight = FontWeight.SemiBold)
+        Text(
+            "Ohne Erlaubnis liegen die Modelle in der App und sind nach einer Neuinstallation weg. " +
+                "Mit \"Zugriff auf alle Dateien\" landen sie im Ordner CharacterFun/Modelle und bleiben.",
+            fontSize = 12.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Button(onClick = {
+            context.startActivity(
+                Intent(
+                    Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                    Uri.parse("package:${context.packageName}"),
+                )
+            )
+        }) { Text("Erlaubnis erteilen") }
     }
 }
 
@@ -185,6 +228,11 @@ private fun ModelCard(vm: TestChatViewModel, model: ModelInfo) {
                     )
                     TextButton(onClick = { vm.cancelDownload(model) }) { Text("Pause") }
                 }
+            }
+            is DownloadState.Moving -> {
+                val fraction = if (state.total > 0) state.copied.toFloat() / state.total else 0f
+                LinearProgressIndicator(progress = { fraction }, modifier = Modifier.fillMaxWidth())
+                Text("Wird in den dauerhaften Ordner verschoben …", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             DownloadState.Done -> Text("Bereit", fontSize = 12.sp, color = MaterialTheme.colorScheme.secondary)
         }
