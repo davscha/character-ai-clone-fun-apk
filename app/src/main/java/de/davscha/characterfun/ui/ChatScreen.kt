@@ -22,10 +22,14 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Casino
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledIconButton
@@ -41,6 +45,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -53,6 +58,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import de.davscha.characterfun.data.Character
+import de.davscha.characterfun.data.ChatMessage
 
 /** Chat mit einer Figur. */
 @Composable
@@ -64,6 +70,19 @@ fun ChatScreen(vm: AppViewModel) {
     // Beim Streamen immer zur neuesten Nachricht scrollen
     LaunchedEffect(vm.messages.size, lastText) {
         if (vm.messages.isNotEmpty()) listState.scrollToItem(vm.messages.lastIndex, Int.MAX_VALUE)
+    }
+
+    var confirmRestart by remember { mutableStateOf(false) }
+    if (confirmRestart) {
+        AlertDialog(
+            onDismissRequest = { confirmRestart = false },
+            title = { Text("Neues Gespräch?") },
+            text = { Text("Das bisherige Gespräch mit ${c.name} wird gelöscht.") },
+            confirmButton = {
+                TextButton(onClick = { confirmRestart = false; vm.restartChat() }) { Text("Neu anfangen") }
+            },
+            dismissButton = { TextButton(onClick = { confirmRestart = false }) { Text("Abbrechen") } },
+        )
     }
 
     Column(Modifier.fillMaxSize().imePadding()) {
@@ -83,7 +102,7 @@ fun ChatScreen(vm: AppViewModel) {
                 )
             }
             IconButton(onClick = { vm.navigate(Screen.Editor(c.id)) }) { Icon(Icons.Default.Edit, "Figur bearbeiten") }
-            TextButton(onClick = { vm.restartChat() }, enabled = !vm.isGenerating) {
+            TextButton(onClick = { confirmRestart = true }, enabled = !vm.isGenerating) {
                 Icon(Icons.Default.Refresh, null)
                 Spacer(Modifier.width(6.dp))
                 Text("Neues Gespräch")
@@ -108,8 +127,11 @@ fun ChatScreen(vm: AppViewModel) {
                     )
                 }
                 itemsIndexed(vm.messages) { i, msg ->
-                    val streaming = vm.isGenerating && i == vm.messages.lastIndex
-                    MessageBubble(c, avatarFile, msg, streaming)
+                    val isLast = i == vm.messages.lastIndex
+                    val streaming = vm.isGenerating && isLast
+                    // Neu würfeln geht bei der letzten Antwort, wenn davor eine Nachricht von dir steht
+                    val canReroll = isLast && !msg.fromUser && i > 0 && vm.messages[i - 1].fromUser
+                    MessageBubble(c, avatarFile, msg, streaming, if (canReroll) vm else null)
                 }
             }
             EngineOverlay(vm, Modifier.align(Alignment.Center))
@@ -175,7 +197,14 @@ private fun EngineOverlay(vm: AppViewModel, modifier: Modifier) {
 }
 
 @Composable
-private fun MessageBubble(c: Character, avatarFile: java.io.File?, msg: ChatMessage, streaming: Boolean) {
+private fun MessageBubble(
+    c: Character,
+    avatarFile: java.io.File?,
+    msg: ChatMessage,
+    streaming: Boolean,
+    /** nur bei der letzten Antwort gesetzt: dann gibt es Neu würfeln und Varianten-Pfeile */
+    rerollVm: AppViewModel?,
+) {
     Row(
         Modifier.fillMaxWidth(),
         horizontalArrangement = if (msg.fromUser) Arrangement.End else Arrangement.Start,
@@ -204,8 +233,26 @@ private fun MessageBubble(c: Character, avatarFile: java.io.File?, msg: ChatMess
                     lineHeight = 22.sp,
                 )
             }
-            msg.stats?.let {
-                Text(it, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp, start = 4.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (rerollVm != null && !streaming) {
+                    if (msg.variants.size > 1) {
+                        IconButton(onClick = { rerollVm.selectVariant(-1) }, enabled = msg.selected > 0, modifier = Modifier.size(32.dp)) {
+                            Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, "Vorherige Variante")
+                        }
+                        Text("${msg.selected + 1}/${msg.variants.size}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        IconButton(
+                            onClick = { rerollVm.selectVariant(1) },
+                            enabled = msg.selected < msg.variants.lastIndex,
+                            modifier = Modifier.size(32.dp),
+                        ) { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, "Nächste Variante") }
+                    }
+                    IconButton(onClick = { rerollVm.regenerate() }, modifier = Modifier.size(32.dp)) {
+                        Icon(Icons.Default.Casino, "Neu würfeln", modifier = Modifier.size(18.dp))
+                    }
+                }
+                msg.stats?.let {
+                    Text(it, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 4.dp))
+                }
             }
         }
     }

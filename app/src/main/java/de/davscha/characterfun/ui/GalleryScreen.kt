@@ -113,6 +113,24 @@ fun GalleryScreen(vm: AppViewModel) {
                 Box(Modifier.padding(horizontal = 24.dp, vertical = 4.dp)) { CrashNotice(it) { vm.dismissCrashNotice() } }
             }
 
+            // Weiter chatten: die letzten Gespräche
+            if (vm.recentChats.isNotEmpty() && query.isBlank()) {
+                Text(
+                    "Weiter chatten",
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(start = 24.dp, top = 4.dp, bottom = 8.dp),
+                )
+                LazyRow(
+                    contentPadding = PaddingValues(horizontal = 24.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.padding(bottom = 16.dp),
+                ) {
+                    items(vm.recentChats, key = { it.characterId }) { chat ->
+                        vm.character(chat.characterId)?.let { c -> RecentChatCard(vm, c, chat.preview) }
+                    }
+                }
+            }
+
             // Kategorie-Tabs
             LazyRow(
                 contentPadding = PaddingValues(horizontal = 24.dp),
@@ -193,6 +211,31 @@ private fun CharacterCard(vm: AppViewModel, c: Character) {
                 onClick = { vm.navigate(Screen.Editor(c.id)) },
                 modifier = Modifier.align(Alignment.TopEnd),
             ) { Icon(Icons.Default.Edit, "Bearbeiten", tint = Color.White.copy(alpha = 0.6f)) }
+        }
+    }
+}
+
+@Composable
+private fun RecentChatCard(vm: AppViewModel, c: Character, preview: String) {
+    Card(
+        onClick = { vm.openChat(c) },
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        modifier = Modifier.width(280.dp),
+    ) {
+        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Avatar(c, vm.repo.avatar(c), size = 48.dp)
+            Spacer(Modifier.width(12.dp))
+            Column {
+                Text(c.name, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    preview,
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
     }
 }

@@ -14,10 +14,10 @@ interface ChatEngine {
     suspend fun load(modelPath: String): Accelerator
 
     /**
-     * Startet ein neues Gespräch. [systemPrompt] beschreibt die Figur,
-     * die Begrüßung ist die erste Nachricht der Figur.
+     * Startet ein Gespräch. [systemPrompt] beschreibt die Figur, [history] ist der bisherige
+     * Verlauf (true = von dir, false = von der Figur) – so lässt sich ein gespeicherter Chat fortsetzen.
      */
-    fun startConversation(systemPrompt: String, greeting: String?, temperature: Double)
+    fun startConversation(systemPrompt: String, history: List<Pair<Boolean, String>>, temperature: Double)
 
     /** Schickt eine Nachricht; die Antwort kommt Stück für Stück. */
     fun send(text: String): Flow<String>

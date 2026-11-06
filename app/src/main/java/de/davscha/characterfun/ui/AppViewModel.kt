@@ -13,6 +13,8 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import de.davscha.characterfun.data.Character
+import de.davscha.characterfun.data.ChatMessage
+import de.davscha.characterfun.data.SavedChat
 import de.davscha.characterfun.data.CharacterRepository
 import de.davscha.characterfun.data.PromptBuilder
 import de.davscha.characterfun.engine.Accelerator
@@ -46,13 +48,6 @@ sealed interface EngineState {
     data class Ready(val model: ModelInfo, val accelerator: Accelerator, val loadSeconds: Double) : EngineState
     data class Failed(val message: String) : EngineState
 }
-
-data class ChatMessage(
-    val fromUser: Boolean,
-    val text: String,
-    /** Nur bei Antworten der Figur: Zeit bis zum ersten Wort und Gesamtzeit */
-    val stats: String? = null,
-)
 
 /** Die Seiten der App */
 sealed interface Screen {
@@ -119,6 +114,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     val characters = mutableStateListOf<Character>()
 
+    /** Chats für "Weiter chatten", neueste zuerst */
+    val recentChats = mutableStateListOf<SavedChat>()
+
     fun character(id: String) = characters.firstOrNull { it.id == id }
 
     // ---------- Chat ----------
@@ -171,6 +169,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             characters.clear()
             characters.addAll(repo.load())
         }
+        refreshRecentChats()
     }
 
     /** Schon geladene Modelle aus dem internen Ordner übernehmen, statt sie neu herunterzuladen. */
@@ -337,6 +336,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun deleteCharacter(id: String) {
         characters.firstOrNull { it.id == id }?.let { c -> repo.avatar(c)?.delete() }
         characters.removeAll { it.id == id }
+        repo.deleteChat(id)
+        recentChats.removeAll { it.characterId == id }
         // Chat mit der gelöschten Figur aus dem Verlauf entfernen
         backStack.removeAll { it is Screen.Chat && it.characterId == id }
         persist()
@@ -352,33 +353,44 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---------- Chat ----------
 
-    /** Öffnet den Chat mit einer Figur; lädt das Modell, falls nötig. */
+    /** true = der Verlauf im Modell passt nicht mehr zur Anzeige (Variante gewechselt, Chat geladen …) */
+    private var needsRebuild = true
+
+    /** Öffnet den Chat mit einer Figur; ein gespeichertes Gespräch geht dort weiter, wo es aufgehört hat. */
     fun openChat(c: Character) {
         stop()
         chatCharacter = c
         messages.clear()
-        if (c.greeting.isNotBlank()) messages += ChatMessage(fromUser = false, text = c.greeting)
+        val saved = repo.loadChat(c.id)
+        if (saved != null && saved.messages.isNotEmpty()) messages.addAll(saved.messages)
+        else if (c.greeting.isNotBlank()) messages += ChatMessage.bot(c.greeting)
+        needsRebuild = true
         navigate(Screen.Chat(c.id))
         prepareConversation()
     }
 
-    /** Neues Gespräch mit derselben Figur. */
+    /** Neues Gespräch mit derselben Figur – das alte wird gelöscht. */
     fun restartChat() {
         val c = chatCharacter ?: return
         stop()
+        repo.deleteChat(c.id)
+        refreshRecentChats()
         messages.clear()
-        if (c.greeting.isNotBlank()) messages += ChatMessage(fromUser = false, text = c.greeting)
+        if (c.greeting.isNotBlank()) messages += ChatMessage.bot(c.greeting)
+        needsRebuild = true
         prepareConversation()
     }
 
     fun changeTemperature(value: Double) {
         temperature = value
         prefs.edit().putFloat("kreativitaet", value.toFloat()).apply()
+        needsRebuild = true
     }
 
     /** Nochmal versuchen, z. B. nach Modellwechsel oder Fehler */
     fun retryChat() = prepareConversation()
 
+    /** Lädt bei Bedarf das Modell und baut das Gespräch aus dem Verlauf auf. */
     private fun prepareConversation() {
         val c = chatCharacter ?: return
         val model = selectedModel
@@ -388,24 +400,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
         chatJob?.cancel()
         preparing = true
+        val history = messages.toList()
         chatJob = viewModelScope.launch {
             try {
-                val state = engineState
-                if (state !is EngineState.Ready || state.model != model) {
-                    engineState = EngineState.Loading(model.title)
-                    val start = SystemClock.elapsedRealtime()
-                    // Merken, was gerade lädt – stürzt die App dabei ab, warnt sie beim nächsten Start
-                    prefs.edit().putString("lade_modell", model.id).commit()
-                    val acc = try {
-                        engine.load(model.file(context).absolutePath)
-                    } finally {
-                        prefs.edit().remove("lade_modell").apply()
-                    }
-                    engineState = EngineState.Ready(model, acc, (SystemClock.elapsedRealtime() - start) / 1000.0)
-                }
-                withContext(Dispatchers.IO) {
-                    engine.startConversation(PromptBuilder.build(c), c.greeting, temperature)
-                }
+                ensureModelLoaded(model)
+                rebuild(c, history)
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -416,42 +415,113 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    private suspend fun ensureModelLoaded(model: ModelInfo) {
+        val state = engineState
+        if (state is EngineState.Ready && state.model == model) return
+        engineState = EngineState.Loading(model.title)
+        val start = SystemClock.elapsedRealtime()
+        // Merken, was gerade lädt – stürzt die App dabei ab, warnt sie beim nächsten Start
+        prefs.edit().putString("lade_modell", model.id).commit()
+        val acc = try {
+            engine.load(model.file(context).absolutePath)
+        } finally {
+            prefs.edit().remove("lade_modell").apply()
+        }
+        engineState = EngineState.Ready(model, acc, (SystemClock.elapsedRealtime() - start) / 1000.0)
+        needsRebuild = true
+    }
+
+    /**
+     * Gibt dem Modell den Verlauf neu mit. Sehr lange Gespräche werden dabei vorne gekürzt,
+     * damit sie ins Gedächtnis des Modells passen – die Figur vergisst dann die ältesten Nachrichten.
+     */
+    private suspend fun rebuild(c: Character, history: List<ChatMessage>) {
+        val kept = ArrayDeque<ChatMessage>()
+        var chars = 0
+        for (m in history.asReversed()) {
+            if (chars + m.text.length > HISTORY_CHARS && kept.isNotEmpty()) break
+            kept.addFirst(m)
+            chars += m.text.length
+        }
+        withContext(Dispatchers.IO) {
+            engine.startConversation(PromptBuilder.build(c), kept.map { it.fromUser to it.text }, temperature)
+        }
+        needsRebuild = false
+        historyChars = chars
+    }
+
+    /** Ungefähre Länge des Verlaufs im Modell (Zeichen) – zum rechtzeitigen Kürzen */
+    private var historyChars = 0
+
     /** true, sobald Modell geladen und Gespräch bereit ist */
     val chatReady get() = engineState is EngineState.Ready && !preparing
 
     fun send(text: String) {
         val input = text.trim()
         if (input.isEmpty() || isGenerating || !chatReady) return
-        messages += ChatMessage(fromUser = true, text = input)
-        messages += ChatMessage(fromUser = false, text = "")
-        val index = messages.lastIndex
-        isGenerating = true
+        val historyBefore = messages.toList()
+        messages += ChatMessage.user(input)
+        messages += ChatMessage.bot("")
+        generateInto(messages.lastIndex, input, historyBefore)
+    }
 
+    /** Neue Variante für die letzte Antwort der Figur. */
+    fun regenerate() {
+        if (isGenerating || !chatReady || messages.size < 2) return
+        val last = messages.last()
+        val userMsg = messages[messages.lastIndex - 1]
+        if (last.fromUser || !userMsg.fromUser) return
+        val historyBefore = messages.subList(0, messages.lastIndex - 1).toList()
+        messages[messages.lastIndex] = last.copy(variants = last.variants + "", selected = last.variants.size, stats = null)
+        needsRebuild = true // die alte Antwort steckt noch im Modell
+        generateInto(messages.lastIndex, userMsg.text, historyBefore)
+    }
+
+    /** Zwischen den Varianten der letzten Antwort blättern (-1 = zurück, +1 = vor). */
+    fun selectVariant(delta: Int) {
+        if (isGenerating || messages.isEmpty()) return
+        val last = messages.last()
+        if (last.fromUser) return
+        val next = (last.selected + delta).coerceIn(0, last.variants.lastIndex)
+        if (next == last.selected) return
+        messages[messages.lastIndex] = last.copy(selected = next, stats = null)
+        needsRebuild = true // das Modell kennt nur die zuletzt erzeugte Variante
+        saveChat()
+    }
+
+    private fun generateInto(index: Int, input: String, historyBefore: List<ChatMessage>) {
+        val c = chatCharacter ?: return
+        isGenerating = true
         viewModelScope.launch {
-            val start = SystemClock.elapsedRealtime()
             var firstChunkAt = 0L
             val reply = StringBuilder()
             try {
+                // Verlauf neu aufbauen, wenn er nicht mehr stimmt oder zu lang wird
+                if (needsRebuild || historyChars + input.length > HISTORY_CHARS * 2) {
+                    rebuild(c, historyBefore)
+                }
+                val start = SystemClock.elapsedRealtime()
                 engine.send(input).collect { chunk ->
                     if (firstChunkAt == 0L) firstChunkAt = SystemClock.elapsedRealtime()
                     reply.append(chunk)
-                    if (index < messages.size) messages[index] = messages[index].copy(text = reply.toString())
+                    if (index < messages.size) messages[index] = messages[index].withText(reply.toString())
                 }
                 val end = SystemClock.elapsedRealtime()
+                historyChars += input.length + reply.length
                 if (index < messages.size) {
-                    messages[index] = messages[index].copy(
-                        text = reply.toString().trim(),
-                        stats = formatStats(start, firstChunkAt, end),
-                    )
+                    messages[index] = messages[index].withText(reply.toString().trim())
+                        .copy(stats = formatStats(start, firstChunkAt, end))
                 }
             } catch (e: Exception) {
+                needsRebuild = true
                 if (index < messages.size) {
-                    messages[index] = messages[index].copy(
-                        text = reply.toString().ifEmpty { "⚠ ${e.message ?: "Fehler beim Antworten"}" },
+                    messages[index] = messages[index].withText(
+                        reply.toString().ifEmpty { "⚠ ${e.message ?: "Fehler beim Antworten"}" }
                     )
                 }
             } finally {
                 isGenerating = false
+                saveChat()
             }
         }
     }
@@ -460,11 +530,34 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         engine.stop()
     }
 
+    // ---------- Gespeicherte Chats ----------
+
+    private fun refreshRecentChats() {
+        recentChats.clear()
+        recentChats.addAll(repo.recentChats().filter { chat -> characters.any { it.id == chat.characterId } })
+    }
+
+    private fun saveChat() {
+        val c = chatCharacter ?: return
+        val chat = SavedChat(c.id, System.currentTimeMillis(), messages.toList())
+        if (chat.messages.none { it.fromUser }) return
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { repo.saveChat(chat) }
+            recentChats.removeAll { it.characterId == c.id }
+            recentChats.add(0, chat)
+        }
+    }
+
     private fun formatStats(start: Long, firstChunk: Long, end: Long): String {
         val total = (end - start) / 1000.0
         if (firstChunk == 0L) return "%.1f s".format(total)
         val first = (firstChunk - start) / 1000.0
         return "erstes Wort nach %.1f s · %.1f s gesamt".format(first, total)
+    }
+
+    private companion object {
+        /** Wie viel Verlauf das Modell mitbekommt – grob 2500 Tokens, passt in 4096 mit Platz für Antworten */
+        const val HISTORY_CHARS = 8000
     }
 
     override fun onCleared() {

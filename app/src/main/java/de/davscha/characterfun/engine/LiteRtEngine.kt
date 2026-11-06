@@ -79,13 +79,15 @@ class LiteRtEngine(private val context: Context) : ChatEngine {
         }
     }
 
-    override fun startConversation(systemPrompt: String, greeting: String?, temperature: Double) {
+    override fun startConversation(systemPrompt: String, history: List<Pair<Boolean, String>>, temperature: Double) {
         val e = engine ?: error("Kein Modell geladen")
         conversation?.let { old -> runCatching { old.close() } }
         conversation = e.createConversation(
             ConversationConfig(
                 systemInstruction = systemPrompt.takeIf { it.isNotBlank() }?.let { Contents.of(it) },
-                initialMessages = listOfNotNull(greeting?.takeIf { it.isNotBlank() }?.let { Message.model(it) }),
+                initialMessages = history
+                    .filter { (_, text) -> text.isNotBlank() }
+                    .map { (fromUser, text) -> if (fromUser) Message.user(text) else Message.model(text) },
                 samplerConfig = SamplerConfig(topK = 64, topP = 0.95, temperature = temperature),
             )
         )

@@ -69,6 +69,34 @@ class CharacterRepository(private val context: Context) {
         name
     }.getOrNull()
 
+    // ---------- Chats: eine Datei pro Figur in Chats/ ----------
+
+    private val chatsDir: File get() = File(dataDir, "Chats").apply { mkdirs() }
+
+    private fun chatFile(characterId: String) = File(chatsDir, "$characterId.json")
+
+    fun loadChat(characterId: String): SavedChat? = runCatching {
+        chatFile(characterId).takeIf { it.exists() }?.let { SavedChat.fromJson(JSONObject(it.readText())) }
+    }.getOrNull()
+
+    fun saveChat(chat: SavedChat) {
+        val tmp = File(chatsDir, "${chat.characterId}.json.tmp")
+        tmp.writeText(chat.toJson().toString(2))
+        tmp.renameTo(chatFile(chat.characterId))
+    }
+
+    fun deleteChat(characterId: String) {
+        chatFile(characterId).delete()
+    }
+
+    /** Alle gespeicherten Chats, neueste zuerst – für "Weiter chatten" */
+    fun recentChats(): List<SavedChat> =
+        chatsDir.listFiles { f -> f.name.endsWith(".json") }
+            ?.mapNotNull { f -> runCatching { SavedChat.fromJson(JSONObject(f.readText())) }.getOrNull() }
+            ?.filter { chat -> chat.messages.any { it.fromUser } }
+            ?.sortedByDescending { it.updatedAt }
+            ?: emptyList()
+
     /** Nach dem Erteilen der Erlaubnis: Figuren aus dem App-Ordner in /CharacterFun übernehmen. */
     private fun moveInternalToShared() {
         if (!hasSharedStorage()) return
@@ -81,6 +109,11 @@ class CharacterRepository(private val context: Context) {
             val target = File(avatarDir, img.name)
             if (!target.exists()) img.copyTo(target)
             img.delete()
+        }
+        File(internalDir, "Chats").listFiles()?.forEach { chat ->
+            val target = File(chatsDir, chat.name)
+            if (!target.exists()) chat.copyTo(target)
+            chat.delete()
         }
         oldFile.delete()
     }
