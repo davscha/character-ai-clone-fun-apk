@@ -36,7 +36,7 @@ class Speaker(context: Context, private val onSpeakingChanged: (String?) -> Unit
 
     /** Liest [text] vor; *Handlungen zwischen Sternchen* werden übersprungen. */
     fun speak(id: String, text: String, pitch: Float, rate: Float) {
-        val clean = text.replace(Regex("\\*[^*]*\\*"), " ").replace(Regex("\\s+"), " ").trim()
+        val clean = cleanForSpeech(text)
         if (clean.isEmpty()) return
         if (!ready) {
             pending = Triple(clean, pitch, rate)
@@ -51,6 +51,12 @@ class Speaker(context: Context, private val onSpeakingChanged: (String?) -> Unit
     fun stop() {
         pending = null
         tts.stop()
+    }
+
+    companion object {
+        /** *Handlungen zwischen Sternchen* werden nicht vorgelesen. */
+        fun cleanForSpeech(text: String) =
+            text.replace(Regex("\\*[^*]*\\*"), " ").replace(Regex("\\s+"), " ").trim()
     }
 
     fun shutdown() {
