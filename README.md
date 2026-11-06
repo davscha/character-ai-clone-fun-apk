@@ -12,6 +12,8 @@ Kleiner character.ai-Klon für Android-Tablets – just for fun. Figuren anlegen
 - **Modelle:** Gemma 4 E2B (2,6 GB) und E4B (3,7 GB) über Googles LiteRT-LM auf dem Grafikchip
 - Modelle und Figuren liegen dauerhaft im Ordner **CharacterFun** (mit Erlaubnis "Zugriff auf alle Dateien") und überstehen Neuinstallationen
 
+Was noch geplant ist, steht in der [To-do-Liste](TODO.md).
+
 ## Installieren
 
 1. Auf dem Tablet unter **Releases → latest** die Datei `CharacterFun.apk` laden.
