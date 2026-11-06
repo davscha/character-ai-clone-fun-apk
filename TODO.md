@@ -4,10 +4,10 @@ Stand: 6. November 2026. Abhaken mit `[x]`, sobald etwas fertig ist.
 
 ## Schnell gemacht, großer Nutzen
 
-- [ ] **1. Nachrichten bearbeiten und löschen** – eigene Nachricht antippen, ändern, die Figur antwortet neu
-- [ ] **2. Antwortlänge pro Figur** – kurz / mittel / lang im Editor
-- [ ] **3. Lieblingsmodell pro Figur** – E2B oder E4B (vorerst kein 12B), die App schaltet beim Öffnen automatisch um
-- [ ] **4. Startszene pro Figur** – z. B. „Ihr sitzt nachts in einer verrauchten Hafenkneipe“, die Figur steigt direkt ein
+- [x] **1. Nachrichten bearbeiten und löschen** – eigene Nachricht antippen, ändern, die Figur antwortet neu
+- [x] **2. Antwortlänge pro Figur** – kurz / mittel / lang im Editor
+- [x] **3. Lieblingsmodell pro Figur** – E2B oder E4B (vorerst kein 12B), die App schaltet beim Öffnen automatisch um
+- [x] **4. Startszene pro Figur** – z. B. „Ihr sitzt nachts in einer verrauchten Hafenkneipe“, die Figur steigt direkt ein
 
 ## Mittlerer Aufwand, macht richtig Spaß
 
