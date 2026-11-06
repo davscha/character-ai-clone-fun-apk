@@ -27,7 +27,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Memory
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -112,9 +112,9 @@ fun GalleryScreen(vm: AppViewModel) {
                 )
                 Spacer(Modifier.width(12.dp))
                 TextButton(onClick = { vm.navigate(Screen.Models) }) {
-                    Icon(Icons.Default.Memory, null)
+                    Icon(Icons.Default.Settings, null)
                     Spacer(Modifier.width(6.dp))
-                    Text("Modelle")
+                    Text("Einstellungen")
                 }
             }
 
@@ -180,7 +180,7 @@ private fun modelLine(vm: AppViewModel): String = when (val s = vm.engineState) 
     is EngineState.Ready -> "${s.model.title} bereit · ${s.accelerator.label}"
     is EngineState.Loading -> "${s.modelTitle} wird geladen …"
     else -> if (vm.downloads[vm.selectedModel.id] == DownloadState.Done) "Modell: ${vm.selectedModel.title}"
-    else "Noch kein Modell – oben rechts unter \"Modelle\" herunterladen"
+    else "Noch kein Modell – oben rechts unter \"Einstellungen\" herunterladen"
 }
 
 @OptIn(ExperimentalFoundationApi::class)

@@ -1,6 +1,10 @@
 package de.davscha.characterfun.ui
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,13 +29,18 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Casino
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -73,11 +82,13 @@ fun ChatScreen(vm: AppViewModel) {
     }
 
     var confirmRestart by remember { mutableStateOf(false) }
+    var showMemories by remember { mutableStateOf(false) }
+    if (showMemories) MemoriesDialog(vm, c) { showMemories = false }
     if (confirmRestart) {
         AlertDialog(
             onDismissRequest = { confirmRestart = false },
             title = { Text("Neues Gespräch?") },
-            text = { Text("Das bisherige Gespräch mit ${c.name} wird gelöscht.") },
+            text = { Text("Das bisherige Gespräch mit ${c.name} wird gelöscht. Angeheftete Erinnerungen bleiben.") },
             confirmButton = {
                 TextButton(onClick = { confirmRestart = false; vm.restartChat() }) { Text("Neu anfangen") }
             },
@@ -100,6 +111,11 @@ fun ChatScreen(vm: AppViewModel) {
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
+            }
+            TextButton(onClick = { showMemories = true }) {
+                Icon(Icons.Default.PushPin, null)
+                Spacer(Modifier.width(6.dp))
+                Text(if (vm.memories.isEmpty()) "Erinnerungen" else "Erinnerungen (${vm.memories.size})")
             }
             IconButton(onClick = { vm.navigate(Screen.Editor(c.id)) }) { Icon(Icons.Default.Edit, "Figur bearbeiten") }
             TextButton(onClick = { confirmRestart = true }, enabled = !vm.isGenerating) {
@@ -131,7 +147,7 @@ fun ChatScreen(vm: AppViewModel) {
                     val streaming = vm.isGenerating && isLast
                     // Neu würfeln geht bei der letzten Antwort, wenn davor eine Nachricht von dir steht
                     val canReroll = isLast && !msg.fromUser && i > 0 && vm.messages[i - 1].fromUser
-                    MessageBubble(c, avatarFile, msg, streaming, if (canReroll) vm else null)
+                    MessageBubble(c, avatarFile, msg, streaming, if (canReroll) vm else null, vm.summarizing, onPin = { vm.addMemory(msg.text) })
                 }
             }
             EngineOverlay(vm, Modifier.align(Alignment.Center))
@@ -196,6 +212,7 @@ private fun EngineOverlay(vm: AppViewModel, modifier: Modifier) {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun MessageBubble(
     c: Character,
@@ -204,7 +221,10 @@ private fun MessageBubble(
     streaming: Boolean,
     /** nur bei der letzten Antwort gesetzt: dann gibt es Neu würfeln und Varianten-Pfeile */
     rerollVm: AppViewModel?,
+    summarizing: Boolean,
+    onPin: () -> Unit,
 ) {
+    var menuOpen by remember { mutableStateOf(false) }
     Row(
         Modifier.fillMaxWidth(),
         horizontalArrangement = if (msg.fromUser) Arrangement.End else Arrangement.Start,
@@ -221,6 +241,8 @@ private fun MessageBubble(
                 Modifier
                     .widthIn(max = 640.dp)
                     .clip(RoundedCornerShape(16.dp))
+                    // Lange drücken: Nachricht als Erinnerung anheften
+                    .combinedClickable(onClick = {}, onLongClick = { if (msg.text.isNotBlank()) menuOpen = true })
                     .background(
                         if (msg.fromUser) MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
                         else MaterialTheme.colorScheme.surfaceVariant
@@ -228,10 +250,19 @@ private fun MessageBubble(
                     .padding(horizontal = 14.dp, vertical = 10.dp)
             ) {
                 Text(
-                    text = roleplayText(msg.text.ifEmpty { if (streaming) "…" else "" }),
+                    text = roleplayText(
+                        msg.text.ifEmpty { if (streaming && summarizing) "*erinnert sich an das Bisherige …*" else if (streaming) "…" else "" }
+                    ),
                     fontSize = 16.sp,
                     lineHeight = 22.sp,
                 )
+                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    DropdownMenuItem(
+                        text = { Text("Als Erinnerung anheften") },
+                        leadingIcon = { Icon(Icons.Default.PushPin, null) },
+                        onClick = { menuOpen = false; onPin() },
+                    )
+                }
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (rerollVm != null && !streaming) {
@@ -305,4 +336,53 @@ private fun InputBar(vm: AppViewModel, c: Character) {
             ) { Icon(Icons.AutoMirrored.Filled.Send, "Senden") }
         }
     }
+}
+
+/** Angeheftete Erinnerungen und die automatische Zusammenfassung des aktuellen Chats. */
+@Composable
+private fun MemoriesDialog(vm: AppViewModel, c: Character, onClose: () -> Unit) {
+    var newMemory by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onClose,
+        title = { Text("Erinnerungen von ${c.name}") },
+        text = {
+            Column(
+                Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text(
+                    "Das hier vergisst ${c.name} nie, auch in langen Gesprächen. Tipp: Lange auf eine Nachricht drücken, um sie anzuheften.",
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                vm.memories.forEachIndexed { i, m ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("• $m", fontSize = 14.sp, modifier = Modifier.weight(1f))
+                        IconButton(onClick = { vm.removeMemory(i) }) {
+                            Icon(Icons.Default.Close, "Entfernen", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedTextField(
+                        value = newMemory,
+                        onValueChange = { newMemory = it },
+                        placeholder = { Text("z. B. Wir haben den Schatz auf der Nebelinsel versteckt") },
+                        modifier = Modifier.weight(1f),
+                        maxLines = 3,
+                    )
+                    IconButton(onClick = { vm.addMemory(newMemory); newMemory = "" }, enabled = newMemory.isNotBlank()) {
+                        Icon(Icons.Default.Add, "Hinzufügen")
+                    }
+                }
+                if (vm.summary.isNotBlank()) {
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outline)
+                    Text("Zusammenfassung (automatisch)", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                    Text(vm.summary, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    TextButton(onClick = { vm.clearSummary() }) { Text("Zusammenfassung löschen") }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onClose) { Text("Fertig") } },
+    )
 }

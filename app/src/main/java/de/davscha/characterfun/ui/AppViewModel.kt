@@ -357,6 +357,52 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** true = der Verlauf im Modell passt nicht mehr zur Anzeige (Variante gewechselt, Chat geladen …) */
     private var needsRebuild = true
 
+    // ---------- Erinnerungen ----------
+
+    /** "Über dich" – bekommt jede Figur mit */
+    var aboutUser by mutableStateOf(prefs.getString("ueber_mich", "") ?: "")
+        private set
+
+    /** Angeheftete Erinnerungen im aktuellen Chat */
+    val memories = mutableStateListOf<String>()
+
+    /** Automatische Zusammenfassung älterer Nachrichten im aktuellen Chat */
+    var summary by mutableStateOf("")
+        private set
+    private var summarizedUpTo = 0
+
+    /** true, während Gemma das bisherige Gespräch zusammenfasst */
+    var summarizing by mutableStateOf(false)
+        private set
+
+    fun changeAboutUser(text: String) {
+        aboutUser = text
+        prefs.edit().putString("ueber_mich", text).apply()
+        needsRebuild = true
+    }
+
+    fun addMemory(text: String) {
+        val t = text.trim().take(400)
+        if (t.isEmpty() || t in memories) return
+        memories += t
+        needsRebuild = true
+        saveChat()
+    }
+
+    fun removeMemory(index: Int) {
+        if (index !in memories.indices) return
+        memories.removeAt(index)
+        needsRebuild = true
+        saveChat()
+    }
+
+    fun clearSummary() {
+        summary = ""
+        summarizedUpTo = 0
+        needsRebuild = true
+        saveChat()
+    }
+
     /** Öffnet den Chat mit einer Figur; ein gespeichertes Gespräch geht dort weiter, wo es aufgehört hat. */
     fun openChat(c: Character) {
         stop()
@@ -365,19 +411,26 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val saved = repo.loadChat(c.id)
         if (saved != null && saved.messages.isNotEmpty()) messages.addAll(saved.messages)
         else if (c.greeting.isNotBlank()) messages += ChatMessage.bot(c.greeting)
+        memories.clear()
+        memories.addAll(saved?.memories.orEmpty())
+        summary = saved?.summary.orEmpty()
+        summarizedUpTo = saved?.summarizedUpTo ?: 0
         needsRebuild = true
         navigate(Screen.Chat(c.id))
         prepareConversation()
     }
 
-    /** Neues Gespräch mit derselben Figur – das alte wird gelöscht. */
+    /** Neues Gespräch mit derselben Figur – Verlauf und Zusammenfassung werden gelöscht, angeheftete Erinnerungen bleiben. */
     fun restartChat() {
         val c = chatCharacter ?: return
         stop()
         repo.deleteChat(c.id)
-        refreshRecentChats()
         messages.clear()
         if (c.greeting.isNotBlank()) messages += ChatMessage.bot(c.greeting)
+        summary = ""
+        summarizedUpTo = 0
+        if (memories.isNotEmpty()) saveChat()
+        refreshRecentChats()
         needsRebuild = true
         prepareConversation()
     }
@@ -444,11 +497,39 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             kept.addFirst(m)
             chars += m.text.length
         }
+        // Was vorne herausfällt und noch nicht zusammengefasst ist, fasst Gemma jetzt zusammen
+        val dropped = history.size - kept.size
+        if (summarizedUpTo > history.size) summarizedUpTo = history.size // z. B. nach Neu würfeln
+        if (dropped > summarizedUpTo) summarize(c, history.subList(summarizedUpTo, dropped), dropped)
+        val prompt = PromptBuilder.build(c, aboutUser, memories.toList(), summary)
         withContext(Dispatchers.IO) {
-            engine.startConversation(PromptBuilder.build(c), kept.map { it.fromUser to it.text }, temperature)
+            engine.startConversation(prompt, kept.map { it.fromUser to it.text }, temperature)
         }
         needsRebuild = false
         historyChars = chars
+    }
+
+    /** Lässt Gemma die herausfallenden Nachrichten in die Zusammenfassung einarbeiten. */
+    private suspend fun summarize(c: Character, newMessages: List<ChatMessage>, upTo: Int) {
+        summarizing = true
+        try {
+            withContext(Dispatchers.IO) {
+                engine.startConversation(PromptBuilder.SUMMARY_SYSTEM, emptyList(), 0.3)
+            }
+            val sb = StringBuilder()
+            engine.send(PromptBuilder.summaryPrompt(c.name, summary, newMessages)).collect { sb.append(it) }
+            val text = sb.toString().trim()
+            if (text.isNotEmpty()) {
+                summary = text.take(1200)
+                summarizedUpTo = upTo
+            }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // Zusammenfassen ist nur eine Hilfe – klappt es nicht, geht es ohne weiter
+        } finally {
+            summarizing = false
+        }
     }
 
     /** Ungefähre Länge des Verlaufs im Modell (Zeichen) – zum rechtzeitigen Kürzen */
@@ -541,7 +622,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
      */
     suspend fun generateProfile(notes: String, base: Character, onProgress: (Int) -> Unit): Character {
         val model = selectedModel
-        require(downloads[model.id] == DownloadState.Done) { "${model.title} ist noch nicht heruntergeladen (Seite \"Modelle\")." }
+        require(downloads[model.id] == DownloadState.Done) { "${model.title} ist noch nicht heruntergeladen (Seite \"Einstellungen\")." }
         check(!isGenerating) { "Es läuft gerade noch eine Antwort." }
         if (preparing) chatJob?.join()
         ensureModelLoaded(model)
@@ -571,12 +652,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun saveChat() {
         val c = chatCharacter ?: return
-        val chat = SavedChat(c.id, System.currentTimeMillis(), messages.toList())
-        if (chat.messages.none { it.fromUser }) return
+        val chat = SavedChat(
+            c.id, System.currentTimeMillis(), messages.toList(),
+            memories = memories.toList(), summary = summary, summarizedUpTo = summarizedUpTo,
+        )
+        if (chat.messages.none { it.fromUser } && chat.memories.isEmpty()) return
         viewModelScope.launch {
             withContext(Dispatchers.IO) { repo.saveChat(chat) }
             recentChats.removeAll { it.characterId == c.id }
-            recentChats.add(0, chat)
+            if (chat.messages.any { it.fromUser }) recentChats.add(0, chat)
         }
     }
 

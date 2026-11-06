@@ -70,7 +70,7 @@ fun ModelsScreen(vm: AppViewModel) {
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = { vm.back() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Zurück") }
-            Text("Modelle", fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
+            Text("Einstellungen", fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
         }
         Column(
             Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp),
@@ -78,6 +78,18 @@ fun ModelsScreen(vm: AppViewModel) {
         ) {
             Column(Modifier.widthIn(max = 640.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 vm.crashNotice?.let { CrashNotice(it) { vm.dismissCrashNotice() } }
+
+                SectionTitle("Über dich")
+                OutlinedTextField(
+                    value = vm.aboutUser,
+                    onValueChange = { vm.changeAboutUser(it) },
+                    placeholder = { Text("z. B. Ich heiße David, wohne in Brandenburg, mag Wrestling und Tennis.") },
+                    supportingText = { Text("Das wissen alle Figuren über dich. Gilt ab der nächsten Nachricht.") },
+                    minLines = 2,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
+                SectionTitle("Modelle")
                 StorageHint(vm)
                 vm.allModels.filter { it.url.isNotEmpty() }.forEach { model -> ModelCard(vm, model) }
                 EngineStatus(vm)

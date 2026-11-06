@@ -44,6 +44,12 @@ data class SavedChat(
     val characterId: String,
     val updatedAt: Long,
     val messages: List<ChatMessage>,
+    /** Angeheftete Erinnerungen – bekommt die Figur immer mit */
+    val memories: List<String> = emptyList(),
+    /** Automatische Zusammenfassung der Nachrichten, die nicht mehr ins Gedächtnis passen */
+    val summary: String = "",
+    /** So viele Nachrichten (von vorn) stecken schon in der Zusammenfassung */
+    val summarizedUpTo: Int = 0,
 ) {
     /** Letzte Nachricht für die "Weiter chatten"-Leiste */
     val preview: String get() = messages.lastOrNull()?.text.orEmpty().replace('\n', ' ')
@@ -52,14 +58,21 @@ data class SavedChat(
         .put("figur", characterId)
         .put("geaendert", updatedAt)
         .put("nachrichten", JSONArray(messages.map { it.toJson() }))
+        .put("erinnerungen", JSONArray(memories))
+        .put("zusammenfassung", summary)
+        .put("zusammengefasstBis", summarizedUpTo)
 
     companion object {
         fun fromJson(o: JSONObject): SavedChat {
             val arr = o.optJSONArray("nachrichten") ?: JSONArray()
+            val mem = o.optJSONArray("erinnerungen") ?: JSONArray()
             return SavedChat(
                 characterId = o.optString("figur"),
                 updatedAt = o.optLong("geaendert"),
                 messages = List(arr.length()) { ChatMessage.fromJson(arr.getJSONObject(it)) },
+                memories = List(mem.length()) { mem.optString(it) }.filter { it.isNotBlank() },
+                summary = o.optString("zusammenfassung"),
+                summarizedUpTo = o.optInt("zusammengefasstBis"),
             )
         }
     }
