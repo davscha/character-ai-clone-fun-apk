@@ -22,6 +22,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Image
@@ -34,6 +35,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -192,6 +194,33 @@ fun EditorScreen(vm: AppViewModel, characterId: String?) {
                             label = { Text(if (ready) m.title else "${m.title} (nicht geladen)") },
                         )
                     }
+                }
+
+                Text("Stimme beim Vorlesen", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Tonhöhe", fontSize = 13.sp, modifier = Modifier.width(80.dp))
+                    Slider(
+                        value = c.voicePitch,
+                        onValueChange = { c = c.copy(voicePitch = (it * 20).toInt() / 20f) },
+                        valueRange = 0.5f..2.0f,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text("%.2f".format(c.voicePitch), fontSize = 13.sp, modifier = Modifier.width(48.dp))
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Tempo", fontSize = 13.sp, modifier = Modifier.width(80.dp))
+                    Slider(
+                        value = c.voiceRate,
+                        onValueChange = { c = c.copy(voiceRate = (it * 20).toInt() / 20f) },
+                        valueRange = 0.5f..2.0f,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text("%.2f".format(c.voiceRate), fontSize = 13.sp, modifier = Modifier.width(48.dp))
+                }
+                OutlinedButton(onClick = { vm.previewVoice(c) }) {
+                    Icon(Icons.AutoMirrored.Filled.VolumeUp, null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Probe hören")
                 }
 
                 Text("Gesprächsstarter (optional)", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)

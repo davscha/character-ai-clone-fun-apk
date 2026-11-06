@@ -48,6 +48,9 @@ data class Character(
     val replyLength: ReplyLength = ReplyLength.MITTEL,
     /** Id des Lieblingsmodells; leer = das Modell aus den Einstellungen */
     val preferredModelId: String = "",
+    /** Vorlesen: Stimmlage (0.5 tief … 2.0 hoch) und Tempo (0.5 langsam … 2.0 schnell) */
+    val voicePitch: Float = 1.0f,
+    val voiceRate: Float = 1.0f,
 ) {
     fun toJson(): JSONObject = JSONObject()
         .put("id", id)
@@ -64,6 +67,8 @@ data class Character(
         .put("scenario", scenario)
         .put("replyLength", replyLength.name)
         .put("preferredModel", preferredModelId)
+        .put("voicePitch", voicePitch.toDouble())
+        .put("voiceRate", voiceRate.toDouble())
 
     companion object {
         fun fromJson(o: JSONObject) = Character(
@@ -82,6 +87,8 @@ data class Character(
             scenario = o.optString("scenario"),
             replyLength = runCatching { ReplyLength.valueOf(o.optString("replyLength")) }.getOrDefault(ReplyLength.MITTEL),
             preferredModelId = o.optString("preferredModel"),
+            voicePitch = o.optDouble("voicePitch", 1.0).toFloat(),
+            voiceRate = o.optDouble("voiceRate", 1.0).toFloat(),
         )
     }
 }

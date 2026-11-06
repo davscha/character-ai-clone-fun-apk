@@ -13,6 +13,8 @@ data class ChatMessage(
     val selected: Int = 0,
     /** Nur bei Antworten der Figur: Zeit bis zum ersten Wort und Gesamtzeit */
     val stats: String? = null,
+    /** Absoluter Pfad eines mitgeschickten Bildes (oder leer) */
+    val image: String = "",
 ) {
     val text: String get() = variants.getOrElse(selected) { "" }
 
@@ -22,9 +24,10 @@ data class ChatMessage(
         .put("vonDir", fromUser)
         .put("varianten", JSONArray(variants))
         .put("gewaehlt", selected)
+        .put("bild", image)
 
     companion object {
-        fun user(text: String) = ChatMessage(fromUser = true, variants = listOf(text))
+        fun user(text: String, image: String = "") = ChatMessage(fromUser = true, variants = listOf(text), image = image)
         fun bot(text: String) = ChatMessage(fromUser = false, variants = listOf(text))
 
         fun fromJson(o: JSONObject): ChatMessage {
@@ -34,6 +37,7 @@ data class ChatMessage(
                 fromUser = o.optBoolean("vonDir"),
                 variants = variants,
                 selected = o.optInt("gewaehlt").coerceIn(0, variants.lastIndex),
+                image = o.optString("bild"),
             )
         }
     }

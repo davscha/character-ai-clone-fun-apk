@@ -89,6 +89,20 @@ class CharacterRepository(private val context: Context) {
         chatFile(characterId).delete()
     }
 
+    /** Ein Bild für den Chat als verkleinertes JPEG in Chats/Bilder ablegen. Gibt den Pfad zurück. */
+    fun importChatImage(uri: Uri): String? = runCatching {
+        val bitmap = context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it) } ?: return null
+        val maxSide = 1024
+        val scale = minOf(1f, maxSide.toFloat() / maxOf(bitmap.width, bitmap.height))
+        val scaled = if (scale < 1f) {
+            Bitmap.createScaledBitmap(bitmap, (bitmap.width * scale).toInt(), (bitmap.height * scale).toInt(), true)
+        } else bitmap
+        val dir = File(chatsDir, "Bilder").apply { mkdirs() }
+        val file = File(dir, "bild-${System.currentTimeMillis()}.jpg")
+        file.outputStream().use { scaled.compress(Bitmap.CompressFormat.JPEG, 90, it) }
+        file.absolutePath
+    }.getOrNull()
+
     /** Alle gespeicherten Chats, neueste zuerst – für "Weiter chatten" */
     fun recentChats(): List<SavedChat> =
         chatsDir.listFiles { f -> f.name.endsWith(".json") }

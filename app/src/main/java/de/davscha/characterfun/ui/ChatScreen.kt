@@ -1,6 +1,12 @@
 package de.davscha.characterfun.ui
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.AsyncImage
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.rememberScrollState
@@ -29,7 +35,11 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.automirrored.filled.VolumeOff
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AddPhotoAlternate
+import androidx.compose.material.icons.filled.StopCircle
 import androidx.compose.material.icons.filled.Casino
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.PushPin
@@ -144,6 +154,13 @@ fun ChatScreen(vm: AppViewModel) {
                     overflow = TextOverflow.Ellipsis,
                 )
             }
+            IconButton(onClick = { vm.toggleAutoRead() }) {
+                Icon(
+                    if (vm.autoRead) Icons.AutoMirrored.Filled.VolumeUp else Icons.AutoMirrored.Filled.VolumeOff,
+                    if (vm.autoRead) "Automatisch vorlesen: an" else "Automatisch vorlesen: aus",
+                    tint = if (vm.autoRead) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             TextButton(onClick = { showMemories = true }) {
                 Icon(Icons.Default.PushPin, null)
                 Spacer(Modifier.width(6.dp))
@@ -198,6 +215,8 @@ fun ChatScreen(vm: AppViewModel) {
                         onPin = { vm.addMemory(msg.text) },
                         onEdit = { editText = msg.text; editIndex = i },
                         onDelete = { vm.deleteMessage(i) },
+                        speaking = vm.speakingId == "msg-$i",
+                        onSpeak = { vm.speak(i) },
                     )
                 }
             }
@@ -301,6 +320,8 @@ private fun MessageBubble(
     onPin: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
+    speaking: Boolean,
+    onSpeak: () -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     Row(
@@ -315,7 +336,19 @@ private fun MessageBubble(
             if (!msg.fromUser) {
                 Text(c.name, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(start = 4.dp, bottom = 2.dp))
             }
-            Box(
+            if (msg.image.isNotEmpty()) {
+                AsyncImage(
+                    model = java.io.File(msg.image),
+                    contentDescription = "Geschicktes Bild",
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier
+                        .padding(bottom = 6.dp)
+                        .widthIn(max = 320.dp)
+                        .heightIn(max = 320.dp)
+                        .clip(RoundedCornerShape(12.dp)),
+                )
+            }
+            if (msg.text.isNotEmpty() || streaming || msg.image.isEmpty()) Box(
                 Modifier
                     .widthIn(max = 640.dp)
                     .clip(RoundedCornerShape(16.dp))
@@ -355,6 +388,17 @@ private fun MessageBubble(
                 }
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
+                // Vorlesen (bzw. anhalten) – bei jeder Antwort der Figur
+                if (!msg.fromUser && !streaming && msg.text.isNotBlank()) {
+                    IconButton(onClick = onSpeak, modifier = Modifier.size(32.dp)) {
+                        Icon(
+                            if (speaking) Icons.Default.StopCircle else Icons.AutoMirrored.Filled.VolumeUp,
+                            if (speaking) "Vorlesen anhalten" else "Vorlesen",
+                            modifier = Modifier.size(18.dp),
+                            tint = if (speaking) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
                 if (rerollVm != null && !streaming) {
                     if (msg.variants.size > 1) {
                         IconButton(onClick = { rerollVm.selectVariant(-1) }, enabled = msg.selected > 0, modifier = Modifier.size(32.dp)) {
@@ -399,6 +443,23 @@ private fun roleplayText(text: String): androidx.compose.ui.text.AnnotatedString
 
 @Composable
 private fun InputBar(vm: AppViewModel, c: Character, text: String, onText: (String) -> Unit) {
+    val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri != null) vm.attachImage(uri)
+    }
+    // Vorschau des angehängten Bildes
+    vm.pendingImage?.let { path ->
+        Row(Modifier.padding(start = 16.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            AsyncImage(
+                model = java.io.File(path),
+                contentDescription = "Angehängtes Bild",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.size(64.dp).clip(RoundedCornerShape(10.dp)),
+            )
+            Spacer(Modifier.width(8.dp))
+            Text("Bild geht mit der nächsten Nachricht mit", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            IconButton(onClick = { vm.clearPendingImage() }) { Icon(Icons.Default.Close, "Bild entfernen") }
+        }
+    }
     Row(
         Modifier.fillMaxWidth().padding(16.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -413,6 +474,12 @@ private fun InputBar(vm: AppViewModel, c: Character, text: String, onText: (Stri
             shape = RoundedCornerShape(24.dp),
         )
         Spacer(Modifier.width(6.dp))
+        // Bild anhängen – nur, wenn das Modell Bilder ansehen kann
+        IconButton(
+            onClick = { pickImage.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+            enabled = vm.imagesSupported && !vm.isGenerating,
+            modifier = Modifier.size(52.dp),
+        ) { Icon(Icons.Default.AddPhotoAlternate, "Bild schicken") }
         // Ideen-Knopf: Gemma schlägt fünf mögliche nächste Nachrichten vor
         IconButton(
             onClick = { vm.suggestReplies() },
@@ -427,7 +494,7 @@ private fun InputBar(vm: AppViewModel, c: Character, text: String, onText: (Stri
         } else {
             FilledIconButton(
                 onClick = { vm.send(text); onText("") },
-                enabled = vm.chatReady && text.isNotBlank(),
+                enabled = vm.chatReady && (text.isNotBlank() || vm.pendingImage != null),
                 modifier = Modifier.size(52.dp),
             ) { Icon(Icons.AutoMirrored.Filled.Send, "Senden") }
         }

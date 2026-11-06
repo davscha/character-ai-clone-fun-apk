@@ -19,8 +19,11 @@ interface ChatEngine {
      */
     fun startConversation(systemPrompt: String, history: List<Pair<Boolean, String>>, temperature: Double)
 
-    /** Schickt eine Nachricht; die Antwort kommt Stück für Stück. */
-    fun send(text: String): Flow<String>
+    /** Schickt eine Nachricht (optional mit Bild); die Antwort kommt Stück für Stück. */
+    fun send(text: String, imagePath: String? = null): Flow<String>
+
+    /** true = das geladene Modell kann Bilder ansehen */
+    val supportsImages: Boolean
 
     /** Bricht eine laufende Antwort ab. */
     fun stop()

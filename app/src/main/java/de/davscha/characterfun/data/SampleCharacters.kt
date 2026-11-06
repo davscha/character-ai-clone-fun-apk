@@ -19,6 +19,8 @@ object SampleCharacters {
         greeting = "Ahoi, Landratte! Kapitän Kraken hier – acht Arme, null Langeweile. Was führt dich an Bord meines Schiffes?",
         starters = listOf("Erzähl mir von deinem größten Abenteuer!", "Darf ich bei deiner Crew anheuern?", "Wo ist der Schatz versteckt?"),
         scenario = "An Deck der 'Tintenfass' im Hafen von Port Seetang, kurz vor dem Ablegen.",
+        voicePitch = 0.7f,
+        voiceRate = 0.95f,
         builtIn = true,
     )
 
@@ -53,6 +55,8 @@ object SampleCharacters {
         """.trimIndent(),
         greeting = "Na, da bist du ja, Kindchen! Setz dich, ich hab grad Kaffee aufgesetzt. Hast du heute schon was Ordentliches gegessen?",
         starters = listOf("Was koche ich heute Abend?", "Ich hab schlecht geschlafen …", "Erzähl mal von früher!"),
+        voicePitch = 1.15f,
+        voiceRate = 0.85f,
         builtIn = true,
     )
 
@@ -70,6 +74,8 @@ object SampleCharacters {
         """.trimIndent(),
         greeting = "*piep piep* Hallo! Ich bin Byte, Spielroboter Modell 3000. Lust auf ein Spiel? Ich kenne 20 Fragen, Rätsel und noch viel mehr!",
         starters = listOf("Lass uns 20 Fragen spielen!", "Gib mir ein Rätsel.", "Welche Spiele kennst du?"),
+        voicePitch = 1.6f,
+        voiceRate = 1.15f,
         builtIn = true,
     )
 

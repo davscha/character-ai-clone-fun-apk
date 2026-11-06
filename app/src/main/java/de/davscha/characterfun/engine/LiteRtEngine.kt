@@ -31,23 +31,31 @@ class LiteRtEngine(private val context: Context) : ChatEngine {
 
     private var engine: Engine? = null
     private var conversation: Conversation? = null
+    override var supportsImages = false
+        private set
 
     override suspend fun load(modelPath: String): Accelerator = withContext(Dispatchers.IO) {
         close()
-        // Reihenfolge: Grafikchip mit Mehr-Token-Vorhersage (schneller), Grafikchip ohne, Prozessor
+        // Reihenfolge: Grafikchip mit Mehr-Token-Vorhersage (schneller), Grafikchip ohne, Prozessor –
+        // jeweils zuerst mit Bildverständnis, notfalls ohne
+        data class Attempt(val acc: Accelerator, val speculative: Boolean, val vision: Boolean)
         val attempts = listOf(
-            Triple(Accelerator.GPU, true, Backend.GPU()),
-            Triple(Accelerator.GPU, false, Backend.GPU()),
-            Triple(Accelerator.CPU, false, Backend.CPU()),
+            Attempt(Accelerator.GPU, true, true),
+            Attempt(Accelerator.GPU, true, false),
+            Attempt(Accelerator.GPU, false, true),
+            Attempt(Accelerator.GPU, false, false),
+            Attempt(Accelerator.CPU, false, true),
+            Attempt(Accelerator.CPU, false, false),
         )
         var lastError: Throwable? = null
-        for ((accelerator, speculative, backend) in attempts) {
+        for (a in attempts) {
             try {
-                engine = createEngine(modelPath, backend, speculative)
-                Log.i(TAG, "Modell geladen auf $accelerator (MTP=$speculative)")
-                return@withContext accelerator
+                engine = createEngine(modelPath, a.acc, a.speculative, a.vision)
+                supportsImages = a.vision
+                Log.i(TAG, "Modell geladen: $a")
+                return@withContext a.acc
             } catch (e: Throwable) {
-                Log.w(TAG, "Laden auf $accelerator (MTP=$speculative) fehlgeschlagen", e)
+                Log.w(TAG, "Laden fehlgeschlagen: $a", e)
                 lastError = e
             }
         }
@@ -55,13 +63,16 @@ class LiteRtEngine(private val context: Context) : ChatEngine {
     }
 
     @OptIn(ExperimentalApi::class)
-    private fun createEngine(modelPath: String, backend: Backend, speculative: Boolean): Engine {
+    private fun createEngine(modelPath: String, acc: Accelerator, speculative: Boolean, vision: Boolean): Engine {
+        fun backend() = if (acc == Accelerator.GPU) Backend.GPU() else Backend.CPU()
         ExperimentalFlags.enableSpeculativeDecoding = speculative
         try {
             val e = Engine(
                 EngineConfig(
                     modelPath = modelPath,
-                    backend = backend,
+                    backend = backend(),
+                    visionBackend = if (vision) backend() else null,
+                    maxNumImages = if (vision) 1 else null,
                     maxNumTokens = MAX_TOKENS,
                     // Beschleunigt das zweite Laden
                     cacheDir = context.cacheDir.absolutePath,
@@ -93,10 +104,18 @@ class LiteRtEngine(private val context: Context) : ChatEngine {
         )
     }
 
-    override fun send(text: String): Flow<String> = callbackFlow {
+    override fun send(text: String, imagePath: String?): Flow<String> = callbackFlow {
         val c = conversation ?: error("Kein Gespräch gestartet")
+        // Bild vor dem Text, so erwartet es Gemma
+        val parts = buildList {
+            if (imagePath != null) {
+                check(supportsImages) { "Dieses Modell kann gerade keine Bilder ansehen." }
+                add(Content.ImageFile(imagePath))
+            }
+            add(Content.Text(text))
+        }
         c.sendMessageAsync(
-            Contents.of(Content.Text(text)),
+            Contents.of(parts),
             object : MessageCallback {
                 override fun onMessage(message: Message) {
                     trySend(message.toString())
@@ -125,6 +144,7 @@ class LiteRtEngine(private val context: Context) : ChatEngine {
         conversation = null
         runCatching { engine?.close() }
         engine = null
+        supportsImages = false
     }
 
     private companion object {

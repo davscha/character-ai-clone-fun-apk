@@ -22,6 +22,7 @@ import de.davscha.characterfun.data.ReplySuggestions
 import de.davscha.characterfun.engine.Accelerator
 import de.davscha.characterfun.engine.ChatEngine
 import de.davscha.characterfun.engine.LiteRtEngine
+import de.davscha.characterfun.engine.Speaker
 import de.davscha.characterfun.model.ModelCatalog
 import de.davscha.characterfun.model.ModelDownloader
 import de.davscha.characterfun.model.ModelInfo
@@ -80,7 +81,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** false = es gibt nichts mehr zurück, App darf sich schließen */
     fun back(): Boolean {
-        if (screen is Screen.Chat) stop()
+        if (screen is Screen.Chat) {
+            stop()
+            stopSpeaking()
+        }
         screen = backStack.removeLastOrNull() ?: return false
         return true
     }
@@ -363,6 +367,65 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** true = der Verlauf im Modell passt nicht mehr zur Anzeige (Variante gewechselt, Chat geladen …) */
     private var needsRebuild = true
 
+    // ---------- Vorlesen ----------
+
+    /** Id der Nachricht, die gerade vorgelesen wird (null = still) */
+    var speakingId by mutableStateOf<String?>(null)
+        private set
+    private val speaker = Speaker(app) { id -> viewModelScope.launch(Dispatchers.Main) { speakingId = id } }
+
+    /** Antworten der Figur automatisch vorlesen */
+    var autoRead by mutableStateOf(prefs.getBoolean("vorlesen", false))
+        private set
+
+    fun toggleAutoRead() {
+        autoRead = !autoRead
+        prefs.edit().putBoolean("vorlesen", autoRead).apply()
+        if (!autoRead) stopSpeaking()
+    }
+
+    /** Nachricht [index] vorlesen – oder anhalten, wenn sie gerade läuft. */
+    fun speak(index: Int) {
+        val c = chatCharacter ?: return
+        val msg = messages.getOrNull(index) ?: return
+        val id = "msg-$index"
+        if (speakingId == id) {
+            stopSpeaking()
+            return
+        }
+        speaker.speak(id, msg.text, c.voicePitch, c.voiceRate)
+    }
+
+    /** Hörprobe im Editor */
+    fun previewVoice(c: Character) {
+        val sample = c.greeting.ifBlank { "Hallo, ich bin ${c.name.ifBlank { "deine neue Figur" }}." }
+        speaker.speak("probe", sample, c.voicePitch, c.voiceRate)
+    }
+
+    fun stopSpeaking() {
+        speaker.stop()
+        speakingId = null
+    }
+
+    // ---------- Bild für die nächste Nachricht ----------
+
+    /** Pfad des Bildes, das mit der nächsten Nachricht mitgeht (null = keins) */
+    var pendingImage by mutableStateOf<String?>(null)
+        private set
+
+    fun attachImage(uri: android.net.Uri) {
+        viewModelScope.launch {
+            pendingImage = withContext(Dispatchers.IO) { repo.importChatImage(uri) }
+        }
+    }
+
+    fun clearPendingImage() {
+        pendingImage = null
+    }
+
+    /** true = das geladene Modell kann Bilder ansehen */
+    val imagesSupported get() = engineState is EngineState.Ready && engine.supportsImages
+
     // ---------- Erinnerungen ----------
 
     /** "Über dich" – bekommt jede Figur mit */
@@ -415,6 +478,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         chatCharacter = c
         messages.clear()
         suggestions.clear()
+        stopSpeaking()
+        pendingImage = null
         val saved = repo.loadChat(c.id)
         if (saved != null && saved.messages.isNotEmpty()) messages.addAll(saved.messages)
         else if (c.greeting.isNotBlank()) messages += ChatMessage.bot(c.greeting)
@@ -531,11 +596,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
         val prompt = PromptBuilder.build(c, aboutUser, memories.toList(), summary)
         withContext(Dispatchers.IO) {
-            engine.startConversation(prompt, kept.map { it.fromUser to it.text }, temperature)
+            engine.startConversation(prompt, kept.map { it.fromUser to historyText(it) }, temperature)
         }
         needsRebuild = false
         historyChars = chars
     }
+
+    /** Im neu aufgebauten Verlauf stehen Bilder nur als Hinweis – die Antwort der Figur darauf trägt den Inhalt weiter. */
+    private fun historyText(m: ChatMessage) =
+        if (m.image.isNotEmpty()) "[schickt ein Bild] ${m.text}".trim() else m.text
 
     /** Lässt Gemma die herausfallenden Nachrichten in die Zusammenfassung einarbeiten. */
     private suspend fun summarize(c: Character, newMessages: List<ChatMessage>, upTo: Int) {
@@ -568,13 +637,20 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun send(text: String) {
         val input = text.trim()
-        if (input.isEmpty() || isGenerating || suggesting || !chatReady) return
+        val image = pendingImage
+        if ((input.isEmpty() && image == null) || isGenerating || suggesting || !chatReady) return
         suggestions.clear()
+        stopSpeaking()
+        pendingImage = null
         val historyBefore = messages.toList()
-        messages += ChatMessage.user(input)
+        messages += ChatMessage.user(input, image.orEmpty())
         messages += ChatMessage.bot("")
-        generateInto(messages.lastIndex, input, historyBefore)
+        generateInto(messages.lastIndex, modelText(input, image), historyBefore, image)
     }
+
+    /** Ohne eigenen Text zum Bild fragt die App die Figur nach ihrer Meinung */
+    private fun modelText(input: String, image: String?) =
+        if (input.isEmpty() && image != null) "Was sagst du zu diesem Bild?" else input
 
     // ---------- Nachrichten bearbeiten und löschen ----------
 
@@ -592,10 +668,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             val historyBefore = messages.subList(0, index).toList()
             while (messages.size > index) messages.removeAt(messages.lastIndex)
             if (summarizedUpTo > index) summarizedUpTo = index
-            messages += ChatMessage.user(t)
+            messages += ChatMessage.user(t, msg.image)
             messages += ChatMessage.bot("")
             needsRebuild = true
-            generateInto(messages.lastIndex, t, historyBefore)
+            generateInto(messages.lastIndex, t, historyBefore, msg.image.ifEmpty { null })
         } else {
             messages[index] = msg.withText(t).copy(stats = null)
             needsRebuild = true
@@ -623,7 +699,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val historyBefore = messages.subList(0, messages.lastIndex - 1).toList()
         messages[messages.lastIndex] = last.copy(variants = last.variants + "", selected = last.variants.size, stats = null)
         needsRebuild = true // die alte Antwort steckt noch im Modell
-        generateInto(messages.lastIndex, userMsg.text, historyBefore)
+        generateInto(messages.lastIndex, modelText(userMsg.text, userMsg.image.ifEmpty { null }), historyBefore, userMsg.image.ifEmpty { null })
     }
 
     /** Zwischen den Varianten der letzten Antwort blättern (-1 = zurück, +1 = vor). */
@@ -638,7 +714,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         saveChat()
     }
 
-    private fun generateInto(index: Int, input: String, historyBefore: List<ChatMessage>) {
+    private fun generateInto(index: Int, input: String, historyBefore: List<ChatMessage>, imagePath: String? = null) {
         val c = chatCharacter ?: return
         isGenerating = true
         viewModelScope.launch {
@@ -650,7 +726,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     rebuild(c, historyBefore)
                 }
                 val start = SystemClock.elapsedRealtime()
-                engine.send(input).collect { chunk ->
+                engine.send(input, imagePath?.takeIf { java.io.File(it).exists() }).collect { chunk ->
                     if (firstChunkAt == 0L) firstChunkAt = SystemClock.elapsedRealtime()
                     reply.append(chunk)
                     if (index < messages.size) messages[index] = messages[index].withText(reply.toString())
@@ -660,6 +736,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 if (index < messages.size) {
                     messages[index] = messages[index].withText(reply.toString().trim())
                         .copy(stats = formatStats(start, firstChunkAt, end))
+                    if (autoRead) speak(index)
                 }
             } catch (e: Exception) {
                 needsRebuild = true
@@ -789,6 +866,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     override fun onCleared() {
+        speaker.shutdown()
         engine.close()
     }
 }
