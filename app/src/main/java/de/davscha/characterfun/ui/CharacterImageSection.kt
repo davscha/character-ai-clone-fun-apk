@@ -78,14 +78,18 @@ fun CharacterImageSection(vm: AppViewModel, c: Character, onChange: (Character) 
 
     // ---- Aussehen ----
     Row(verticalAlignment = Alignment.CenterVertically) {
-        OutlinedTextField(
+        TagInput(
             value = c.appearance,
-            onValueChange = { onChange(c.copy(appearance = it)) },
-            label = { Text(tr("Aussehen (Tags, ohne Kleidung)")) },
-            placeholder = { Text("long hair, blonde hair, green eyes, glasses") },
-            minLines = 2,
+            onChange = { onChange(c.copy(appearance = it)) },
+            label = tr("Aussehen (Tags, ohne Kleidung)"),
+            field = de.davscha.characterfun.data.TagField.APPEARANCE,
+            placeholder = "long hair, blonde hair, green eyes, glasses",
             modifier = Modifier.weight(1f),
         )
+        // Aussehen würfeln – sofort, ohne Gemma
+        IconButton(onClick = { onChange(c.copy(appearance = de.davscha.characterfun.data.TagLibrary.randomAppearance())) }) {
+            Icon(Icons.Default.Casino, tr("Aussehen würfeln"))
+        }
         // Gemma liest den Steckbrief und schreibt Tags
         IconButton(
             onClick = {

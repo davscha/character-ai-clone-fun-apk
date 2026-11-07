@@ -310,6 +310,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         // Sprache der Oberfläche
         I18n.lang = AppLanguage.entries.firstOrNull { it.name == prefs.getString("sprache", null) } ?: AppLanguage.DE
         refreshStorage()
+        // Tag-Liste für Vorschläge und Aufräumen im Hintergrund laden
+        viewModelScope.launch(Dispatchers.IO) { de.davscha.characterfun.data.TagLibrary.load(context) }
         val savedId = prefs.getString("modell", null)
         selectedModel = allModels.firstOrNull { it.id == savedId } ?: ModelCatalog.E2B
         // Ist die App beim letzten Laden abgestürzt (z. B. Modell zu groß)? Dann zurück zu E2B.
@@ -1237,10 +1239,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             "Gesprächsende mit der Figur \"${c.name}\":\n${recent.ifBlank { "(noch nichts)" }}\n\n" +
                 "Beschreibe den aktuellen Moment, so wie ihn eine Kamera von ${c.name} einfangen würde, mit 6 bis 12 englischen Tags: " +
                 "was ${c.name} gerade tut (Pose, Handlung), Gesichtsausdruck, Blickrichtung, Bildausschnitt (z. B. upper body, cowboy shot, full body). " +
-                "KEINE Tags zu Haaren, Augen, Körper, Kleidung oder Ort – die kommen von woanders. Nur die Tags.",
+                "KEINE Tags zu Haaren, Augen, Körper, Kleidung oder Ort – die kommen von woanders. Nur die Tags.\n\n" +
+                "Bewährte Tags zur Auswahl (nimm bevorzugt solche):\n" +
+                "Ausdruck: ${de.davscha.characterfun.data.TagLibrary.examples("pose:expression", 30)}\n" +
+                "Haltung: ${de.davscha.characterfun.data.TagLibrary.examples("pose:posture", 25)}\n" +
+                "Gesten: ${de.davscha.characterfun.data.TagLibrary.examples("pose:gesture", 20)}\n" +
+                "Kamera: ${de.davscha.characterfun.data.TagLibrary.examples("pose:camera", 20)}",
             0.5,
         )
-        return ImagePrompt.join(answer.lines().joinToString(",") { it.trim().trimStart('-', '*', ' ') }.replace("\"", ""))
+        return de.davscha.characterfun.data.TagLibrary.clean(answer.lines().joinToString(",") { it.trim().trimStart('-', '*', ' ') }.replace("\"", ""), de.davscha.characterfun.data.TagField.SCENE)
     }
 
     /** Malt die Szene mit der Figur und gibt den Pfad des Bildes zurück */
@@ -1638,7 +1645,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             "Beschreibung: ${description.trim()}\n\nSchreibe 6 bis 15 englische Danbooru-Tags für $what. Nur die Tags, durch Kommas getrennt.",
             0.4,
         )
-        return ImagePrompt.join(answer.lines().joinToString(",") { it.trim().trimStart('-', '*', ' ') }.replace("\"", ""))
+        val field = when (kind) {
+            FundusKind.LOCATION -> de.davscha.characterfun.data.TagField.LOCATION
+            FundusKind.CLOTHING -> de.davscha.characterfun.data.TagField.CLOTHING
+            null -> de.davscha.characterfun.data.TagField.APPEARANCE
+        }
+        // Aufräumen: echte Tags, nichts aus dem falschen Fach
+        return de.davscha.characterfun.data.TagLibrary.clean(answer.lines().joinToString(",") { it.trim().trimStart('-', '*', ' ') }.replace("\"", ""), field)
     }
 
     // ---------- Rooms (Gruppenchat) ----------

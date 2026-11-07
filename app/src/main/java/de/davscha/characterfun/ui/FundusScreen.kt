@@ -214,12 +214,12 @@ private fun FundusItemDialog(vm: AppViewModel, kind: FundusKind, original: Fundu
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
-                OutlinedTextField(
+                TagInput(
                     value = item.tags,
-                    onValueChange = { item = item.copy(tags = it) },
-                    label = { Text(tr("Tags (Englisch, mit Kommas)")) },
-                    placeholder = { Text(if (kind == FundusKind.LOCATION) "cafe, indoors, warm lighting" else "brown coat, white sweater, black pants") },
-                    minLines = 2,
+                    onChange = { item = item.copy(tags = it) },
+                    label = tr("Tags (Englisch, mit Kommas)"),
+                    field = if (kind == FundusKind.LOCATION) de.davscha.characterfun.data.TagField.LOCATION else de.davscha.characterfun.data.TagField.CLOTHING,
+                    placeholder = if (kind == FundusKind.LOCATION) "cafe, indoors, warm lighting" else "brown coat, white sweater, black pants",
                     modifier = Modifier.fillMaxWidth(),
                 )
                 // Gemma hilft beim Schreiben der Tags

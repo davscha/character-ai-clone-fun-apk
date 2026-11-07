@@ -64,6 +64,14 @@ Grundeinstellungen: Positiv-Basis `masterpiece, highres, PandorasBoxStyle`, Nega
 - [x] **F3. Im Chat** – Ort und Kleidung wählen (Hinweis der Spielleitung bei Wechsel, Figur weiß Bescheid), „Bild von der Szene“ (Gemma schreibt die Szenen-Tags), auch in der Bildhilfe und im Room (eine Figur pro Bild)
 - [x] **F4. Bilderbuch** – Bilder aus dem Chat mit Erzähltext als PDF zum Blättern und Teilen
 
+## Runde 4 – Tag-Liste (aus Davids tags.csv)
+
+- [x] **T1. Gemmas Tags aufräumen** – Schreibvarianten → echte Tags, falsches Fach raus (z. B. Kleidung im Aussehen)
+- [x] **T2. Vorschläge beim Tippen** in allen Tag-Feldern, beliebteste zuerst
+- [x] **T3. Tag-Baukasten** – Reiter je Fach (Haare, Augen, Oberteil, Schuhe, Ort, Ausdruck, Kamera …) zum Antippen, mit Suche
+- [x] **T4. Aussehen würfeln** im Figurenblatt
+- [x] **T5. Gemma bekommt bewährte Tags** für „Bild von der Szene“
+
 ## Runde 2 – Praktisches (Etappe E)
 
 - [ ] **29. Suche in alten Chats**

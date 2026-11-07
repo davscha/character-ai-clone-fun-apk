@@ -143,12 +143,12 @@ fun ImageMessageDialog(
                             }
                         }
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            OutlinedTextField(
+                            TagInput(
                                 value = paintTags,
-                                onValueChange = { paintTags = it },
-                                label = { Text(tr("Was ist zu sehen? (Tags)")) },
-                                placeholder = { Text("sitting, sofa, smile, looking at viewer") },
-                                minLines = 2,
+                                onChange = { paintTags = it },
+                                label = tr("Was ist zu sehen? (Tags)"),
+                                field = de.davscha.characterfun.data.TagField.ANY,
+                                placeholder = "sitting, sofa, smile, looking at viewer",
                                 enabled = !painting && !suggesting,
                                 modifier = Modifier.weight(1f),
                             )
