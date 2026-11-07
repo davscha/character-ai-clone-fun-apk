@@ -1249,6 +1249,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         return withContext(Dispatchers.IO) { repo.saveChatImageBytes(png) }
     }
 
+    /** Bild für „Bild als Nachricht“ malen: optional mit einer Figur darauf, sonst nur Ort + Tags */
+    suspend fun paintFree(tags: String, loc: FundusItem?, who: Character?, onProgress: (Int) -> Unit): String {
+        if (who != null) {
+            val outfit = if (who.id == chatCharacter?.id) chatOutfit else clothing(who.defaultOutfitId)
+            return paintScene(who, loc, outfit, tags, randomSeed = false, onProgress = onProgress)
+        }
+        val png = paint(ImagePrompt.join(loc?.tags, tags), null, (0..999_999_999L).random(), "multiple views", onProgress)
+        return withContext(Dispatchers.IO) { repo.saveChatImageBytes(png) }
+    }
+
     /** Das gemalte Bild als Nachricht der Figur in den Einzelchat */
     fun addSceneImage(path: String) {
         messages += ChatMessage(fromUser = false, variants = listOf(""), image = path)

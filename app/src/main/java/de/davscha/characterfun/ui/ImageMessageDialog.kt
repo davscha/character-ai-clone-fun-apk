@@ -52,6 +52,8 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import de.davscha.characterfun.data.AiHelpers
 import de.davscha.characterfun.data.Character
+import androidx.compose.material.icons.filled.AutoFixHigh
+import androidx.compose.material3.IconButton
 import de.davscha.characterfun.i18n.tr
 import kotlinx.coroutines.launch
 
@@ -75,7 +77,15 @@ fun ImageMessageDialog(
     var mode by remember { mutableStateOf(AiHelpers.imageModes.first()) }
     var result by remember { mutableStateOf("") }
     var attach by remember { mutableStateOf(false) }
-    val busy = vm.helperBusy
+    // Bild malen lassen statt auswählen
+    var paintMode by remember { mutableStateOf(false) }
+    var paintTags by remember { mutableStateOf("") }
+    var paintLocation by remember { mutableStateOf(vm.chatLocationId) }
+    var who by remember { mutableStateOf<Character?>(null) }
+    var painting by remember { mutableStateOf(false) }
+    var seconds by remember { mutableStateOf(0) }
+    var suggesting by remember { mutableStateOf(false) }
+    val busy = vm.helperBusy || painting
 
     val pick = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) scope.launch {
@@ -104,8 +114,83 @@ fun ImageMessageDialog(
                     fontSize = 13.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                // Auswählen oder malen
+                if (path == null && !paintMode) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(selected = true, onClick = {}, label = { Text("🖼️ " + tr("Bild auswählen")) })
+                        FilterChip(selected = false, onClick = { paintMode = true }, enabled = vm.comfyReady, label = { Text("🎨 " + tr("Bild malen (Tags)")) })
+                    }
+                }
+                if (paintMode && path == null) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            LocationPicker(vm, vm.location(paintLocation), enabled = !painting) { paintLocation = it }
+                            TextButton(onClick = { paintMode = false }, enabled = !painting) { Text(tr("Doch auswählen")) }
+                        }
+                        // Wer ist mit auf dem Bild?
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            FilterChip(selected = who == null, onClick = { who = null }, label = { Text(tr("Niemand")) })
+                            targets.forEach { t ->
+                                FilterChip(selected = who?.id == t.id, onClick = { who = t }, label = { Text("${t.emoji} ${t.name}") })
+                            }
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            OutlinedTextField(
+                                value = paintTags,
+                                onValueChange = { paintTags = it },
+                                label = { Text(tr("Was ist zu sehen? (Tags)")) },
+                                placeholder = { Text("sitting, sofa, smile, looking at viewer") },
+                                minLines = 2,
+                                enabled = !painting && !suggesting,
+                                modifier = Modifier.weight(1f),
+                            )
+                            IconButton(
+                                onClick = {
+                                    val t = who ?: targets.firstOrNull() ?: return@IconButton
+                                    suggesting = true
+                                    scope.launch {
+                                        val recent = if (targets.size > 1) vm.recentRoomText() else vm.recentChatText()
+                                        runCatching { vm.sceneTags(t, recent) }.onSuccess { paintTags = it }
+                                            .onFailure { Toast.makeText(context, it.message ?: tr("Fehler"), Toast.LENGTH_LONG).show() }
+                                        suggesting = false
+                                    }
+                                },
+                                enabled = !painting && !suggesting,
+                            ) {
+                                if (suggesting) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                                else Icon(Icons.Default.AutoFixHigh, tr("Gemma schlägt Tags vor"))
+                            }
+                        }
+                        if (painting) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                                Spacer(Modifier.width(10.dp))
+                                Text(tr("ComfyUI malt … %s s", seconds))
+                            }
+                        } else {
+                            Button(
+                                onClick = {
+                                    painting = true
+                                    seconds = 0
+                                    scope.launch {
+                                        runCatching { vm.paintFree(paintTags, vm.location(paintLocation), who) { seconds = it } }
+                                            .onSuccess { p ->
+                                                path = p
+                                                result = ""
+                                                // Die Figur ist selbst auf dem Bild – dann spricht die Nachricht sie direkt an
+                                                if (hint.isBlank() && who != null) hint = tr("Auf dem Bild ist %s.", who!!.name)
+                                            }
+                                            .onFailure { Toast.makeText(context, it.message ?: tr("Fehler"), Toast.LENGTH_LONG).show() }
+                                        painting = false
+                                    }
+                                },
+                                enabled = vm.comfyReady && paintTags.isNotBlank(),
+                            ) { Text(tr("Malen")) }
+                        }
+                    }
+                }
                 // Bild oder Platzhalter zum Antippen
-                Box(
+                if (!paintMode || path != null) Box(
                     Modifier
                         .fillMaxWidth()
                         .heightIn(min = 140.dp, max = 260.dp)
