@@ -177,6 +177,8 @@ fun ImageMessageDialog(
                                             .onSuccess { p ->
                                                 path = p
                                                 result = ""
+                                                // Selbst gemaltes Bild geht standardmäßig mit in den Chat
+                                                attach = allowAttach
                                                 // Die Figur ist selbst auf dem Bild – dann spricht die Nachricht sie direkt an
                                                 if (hint.isBlank() && who != null) hint = tr("Auf dem Bild ist %s.", who!!.name)
                                             }
@@ -228,12 +230,14 @@ fun ImageMessageDialog(
                         FilterChip(selected = mode == m, onClick = { mode = m }, label = { Text(tr(m.first)) })
                     }
                 }
-                if (busy) {
+                if (vm.helperBusy && !painting && !suggesting) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
                         Spacer(Modifier.width(10.dp))
                         Text(tr("Gemma schaut sich das Bild an …"))
                     }
+                } else if (busy) {
+                    // ComfyUI malt gerade – oben steht der Fortschritt
                 } else if (result.isBlank()) {
                     Button(onClick = { generate() }, enabled = path != null) { Text(tr("Nachricht schreiben")) }
                 }
