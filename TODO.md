@@ -25,10 +25,10 @@ Stand: 7. November 2026. Abhaken mit `[x]`, sobald etwas fertig ist.
 
 ## Runde 2 – Spiele (Etappe A)
 
-- [ ] **13. 20 Fragen** – die Figur denkt sich etwas aus, du rätst mit Ja/Nein (oder umgekehrt)
-- [ ] **14. Wer bin ich?** – die Figur spielt heimlich eine Person/ein Tier, du findest es heraus
-- [ ] **15. Text-Abenteuer** – Figur als Spielleiter, drei Möglichkeiten pro Runde, optional Würfel und Lebenspunkte
-- [ ] **16. Geschichten-Kette** – abwechselnd je ein Satz einer Geschichte
+- [x] **13. 20 Fragen** – die Figur denkt sich etwas aus, du rätst mit Ja/Nein (oder umgekehrt)
+- [x] **14. Wer bin ich?** – die Figur spielt heimlich eine Person/ein Tier, du findest es heraus
+- [x] **15. Text-Abenteuer** – Figur als Spielleiter, drei Möglichkeiten pro Runde, optional Würfel und Lebenspunkte
+- [x] **16. Geschichten-Kette** – abwechselnd je ein Satz einer Geschichte
 
 ## Runde 2 – Room-Spiele (Etappe B)
 

@@ -4,6 +4,10 @@ import de.davscha.characterfun.i18n.I18n
 import de.davscha.characterfun.i18n.tr
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.SportsEsports
+import de.davscha.characterfun.data.Game
+import de.davscha.characterfun.data.GameState
+import de.davscha.characterfun.data.Games
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.platform.LocalContext
@@ -18,6 +22,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.ui.layout.ContentScale
 import coil.compose.AsyncImage
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -106,6 +111,8 @@ fun ChatScreen(vm: AppViewModel) {
     var confirmRestart by remember { mutableStateOf(false) }
     var showMemories by remember { mutableStateOf(false) }
     if (showMemories) MemoriesDialog(vm, c) { showMemories = false }
+    var showGames by remember { mutableStateOf(false) }
+    if (showGames) GamePickerDialog(vm, c) { showGames = false }
 
     // Nachricht bearbeiten
     var editIndex by remember { mutableStateOf(-1) }
@@ -171,6 +178,9 @@ fun ChatScreen(vm: AppViewModel) {
                     tint = if (vm.autoRead) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+            IconButton(onClick = { showGames = true }, enabled = vm.chatReady && !vm.isGenerating) {
+                Icon(Icons.Default.SportsEsports, tr("Spiel starten"), tint = MaterialTheme.colorScheme.secondary)
+            }
             TextButton(onClick = { showMemories = true }) {
                 Icon(Icons.Default.PushPin, null)
                 Spacer(Modifier.width(6.dp))
@@ -184,6 +194,7 @@ fun ChatScreen(vm: AppViewModel) {
             }
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outline)
+        vm.game?.let { GameBanner(vm, it) }
 
         Box(Modifier.weight(1f).fillMaxWidth()) {
             LazyColumn(
@@ -255,6 +266,20 @@ fun ChatScreen(vm: AppViewModel) {
                         }
                     }
                     IconButton(onClick = { vm.clearSuggestions() }) { Icon(Icons.Default.Close, "Ideen schließen") }
+                }
+            }
+        } else if (vm.gameOptions.isNotEmpty()) {
+            // Text-Abenteuer: die drei Möglichkeiten zum Antippen
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                itemsIndexed(vm.gameOptions) { i, o ->
+                    SuggestionChip(
+                        onClick = { vm.send(o) },
+                        label = { Text("${i + 1}. $o", maxLines = 2) },
+                        modifier = Modifier.widthIn(max = 320.dp),
+                    )
                 }
             }
         } else if (vm.chatReady && vm.messages.none { it.fromUser } && c.starters.isNotEmpty()) {
@@ -604,4 +629,68 @@ private fun MemoriesDialog(vm: AppViewModel, c: Character, onClose: () -> Unit) 
         },
         confirmButton = { TextButton(onClick = onClose) { Text(tr("Fertig")) } },
     )
+}
+
+/** Spiel aussuchen – die Figur kennt danach sofort die Regeln. */
+@Composable
+private fun GamePickerDialog(vm: AppViewModel, c: Character, onClose: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onClose,
+        title = { Text(tr("Spiel mit %s", c.name)) },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                if (vm.game != null) {
+                    Text(tr("Das laufende Spiel wird dabei beendet."), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Game.entries.forEach { g ->
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { onClose(); vm.startGame(g) }
+                            .padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(g.emoji, fontSize = 26.sp)
+                        Spacer(Modifier.width(12.dp))
+                        Column {
+                            Text(tr(g.label), fontWeight = FontWeight.SemiBold)
+                            Text(tr(g.description, c.name), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onClose) { Text(tr("Abbrechen")) } },
+    )
+}
+
+/** Leiste unter der Kopfzeile, solange ein Spiel läuft */
+@Composable
+private fun GameBanner(vm: AppViewModel, state: GameState) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.secondary.copy(alpha = 0.12f))
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("${state.game.emoji} ${tr(state.game.label)}", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+        if (state.game == Game.TWENTY_QUESTIONS) {
+            Spacer(Modifier.width(10.dp))
+            Text(
+                tr("Frage %s von %s", vm.gameQuestions.coerceAtMost(Games.MAX_QUESTIONS), Games.MAX_QUESTIONS),
+                fontSize = 13.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Spacer(Modifier.weight(1f))
+        if (state.game == Game.ADVENTURE) {
+            TextButton(onClick = { vm.rollDice() }, enabled = vm.chatReady && !vm.isGenerating) { Text("🎲 " + tr("Würfeln")) }
+        }
+        if (state.secret.isNotBlank()) {
+            TextButton(onClick = { vm.endGame(reveal = true) }) { Text(tr("Auflösen")) }
+        }
+        TextButton(onClick = { vm.endGame() }) { Text(tr("Spiel beenden")) }
+    }
 }

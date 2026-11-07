@@ -14,6 +14,7 @@ object PromptBuilder {
         aboutUser: String = "",
         memories: List<String> = emptyList(),
         summary: String = "",
+        game: GameState? = null,
     ): String = buildString {
         appendLine("Du spielst in einem Rollenspiel-Chat die Figur \"${c.name}\".")
         if (c.shortDescription.isNotBlank()) appendLine(c.shortDescription.trim())
@@ -48,6 +49,12 @@ object PromptBuilder {
         appendLine("- ${c.replyLength.rule} Keine Aufzählungen, keine Überschriften.")
         appendLine("- Antworte auf ${I18n.lang.promptName}, außer deine Beschreibung sagt etwas anderes.")
         append("- Handlungen und Gesten schreibst du zwischen Sternchen, z. B. *grinst*.")
+        if (game != null) {
+            appendLine()
+            appendLine()
+            appendLine("Spiel (diese Regeln gehen den Regeln oben vor):")
+            append(Games.rules(game, c))
+        }
     }
 
     // ---------- Rooms (Gruppenchat) ----------

@@ -54,6 +54,8 @@ data class SavedChat(
     val summary: String = "",
     /** So viele Nachrichten (von vorn) stecken schon in der Zusammenfassung */
     val summarizedUpTo: Int = 0,
+    /** Laufendes Spiel (null = keins) */
+    val game: GameState? = null,
 ) {
     /** Letzte Nachricht für die "Weiter chatten"-Leiste */
     val preview: String get() = messages.lastOrNull()?.text.orEmpty().replace('\n', ' ')
@@ -65,6 +67,7 @@ data class SavedChat(
         .put("erinnerungen", JSONArray(memories))
         .put("zusammenfassung", summary)
         .put("zusammengefasstBis", summarizedUpTo)
+        .apply { game?.let { put("spiel", it.toJson()) } }
 
     companion object {
         fun fromJson(o: JSONObject): SavedChat {
@@ -77,6 +80,7 @@ data class SavedChat(
                 memories = List(mem.length()) { mem.optString(it) }.filter { it.isNotBlank() },
                 summary = o.optString("zusammenfassung"),
                 summarizedUpTo = o.optInt("zusammengefasstBis"),
+                game = GameState.fromJson(o.optJSONObject("spiel")),
             )
         }
     }

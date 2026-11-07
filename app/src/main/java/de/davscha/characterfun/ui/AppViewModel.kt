@@ -19,6 +19,9 @@ import de.davscha.characterfun.data.Character
 import de.davscha.characterfun.data.ChatMessage
 import de.davscha.characterfun.data.SavedChat
 import de.davscha.characterfun.data.Room
+import de.davscha.characterfun.data.Game
+import de.davscha.characterfun.data.GameState
+import de.davscha.characterfun.data.Games
 import de.davscha.characterfun.data.RoomMessage
 import de.davscha.characterfun.data.CharacterRepository
 import de.davscha.characterfun.data.PromptBuilder
@@ -644,6 +647,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         memories.addAll(saved?.memories.orEmpty())
         summary = saved?.summary.orEmpty()
         summarizedUpTo = saved?.summarizedUpTo ?: 0
+        game = saved?.game
         needsRebuild = true
         if (replace && screen is Screen.Chat) screen = Screen.Chat(c.id) else navigate(Screen.Chat(c.id))
         prepareConversation()
@@ -660,8 +664,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         summarizedUpTo = 0
         if (memories.isNotEmpty()) saveChat()
         refreshRecentChats()
-        rooms.clear()
-        rooms.addAll(repo.loadRooms())
+        game = null
         needsRebuild = true
         prepareConversation()
     }
@@ -765,7 +768,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             summarize(c, history.subList(summarizedUpTo, end), end)
             if (summarizedUpTo == before) break // Zusammenfassen hat nicht geklappt – ohne weiter
         }
-        val prompt = PromptBuilder.build(c, aboutUser, memories.toList(), summary)
+        val prompt = PromptBuilder.build(c, aboutUser, memories.toList(), summary, game)
         withContext(Dispatchers.IO) {
             engine.startConversation(prompt, kept.map { it.fromUser to historyText(it) }, temperature)
         }
@@ -816,7 +819,53 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val historyBefore = messages.toList()
         messages += ChatMessage.user(input, image.orEmpty())
         messages += ChatMessage.bot("")
-        generateInto(messages.lastIndex, modelText(input, image), historyBefore, image)
+        generateInto(messages.lastIndex, gameText(modelText(input, image)), historyBefore, image)
+    }
+
+    // ---------- Spiele ----------
+
+    /** Das laufende Spiel im Chat (null = keins) */
+    var game by mutableStateOf<GameState?>(null)
+        private set
+
+    /** Wie viele Nachrichten du seit Spielbeginn geschrieben hast (bei 20 Fragen = Fragen) */
+    val gameQuestions: Int get() {
+        val g = game ?: return 0
+        return messages.drop(g.startIndex + 1).count { it.fromUser }
+    }
+
+    fun startGame(g: Game) {
+        if (!chatReady || isGenerating || suggesting) return
+        game = GameState(g, Games.secretFor(g), messages.size)
+        needsRebuild = true // die Figur braucht die Spielregeln
+        send(tr(g.opening))
+    }
+
+    /** Spiel beenden; [reveal] = bei 20 Fragen / Wer bin ich die Lösung zeigen */
+    fun endGame(reveal: Boolean = false) {
+        val g = game ?: return
+        if (isGenerating) stop()
+        if (reveal && g.secret.isNotBlank()) messages += ChatMessage.bot("*${tr("Die Lösung war: %s", g.secret)}*")
+        game = null
+        needsRebuild = true
+        saveChat()
+    }
+
+    /** Würfeln im Text-Abenteuer – die Zahl würfelt die App, nicht das Modell */
+    fun rollDice() = send("🎲 *${tr("würfelt eine %s", (1..6).random())}*")
+
+    /** Die drei Möglichkeiten der letzten Spielleiter-Antwort */
+    val gameOptions: List<String> get() {
+        if (game?.game != Game.ADVENTURE || isGenerating) return emptyList()
+        val last = messages.lastOrNull()?.takeIf { !it.fromUser } ?: return emptyList()
+        return Games.options(last.text)
+    }
+
+    /** Bei 20 Fragen bekommt das Modell die Nummer der Frage mit (du siehst sie nicht) */
+    private fun gameText(input: String): String {
+        val g = game ?: return input
+        if (g.game != Game.TWENTY_QUESTIONS || messages.size <= g.startIndex + 2) return input
+        return "$input\n(${tr("Frage %s von %s", gameQuestions, Games.MAX_QUESTIONS)})"
     }
 
     /** Ohne eigenen Text zum Bild fragt die App die Figur nach ihrer Meinung */
@@ -1180,7 +1229,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val c = chatCharacter ?: return
         val chat = SavedChat(
             c.id, System.currentTimeMillis(), messages.toList(),
-            memories = memories.toList(), summary = summary, summarizedUpTo = summarizedUpTo,
+            memories = memories.toList(), summary = summary, summarizedUpTo = summarizedUpTo, game = game,
         )
         if (chat.messages.none { it.fromUser } && chat.memories.isEmpty()) {
             // Nichts mehr übrig (z. B. alles gelöscht) – gespeicherten Chat entfernen
