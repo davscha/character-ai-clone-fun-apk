@@ -26,6 +26,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import de.davscha.characterfun.data.Character
+import de.davscha.characterfun.i18n.tr
 
 /** Tablet-Layout: links die Chatliste (wie bei einem Messenger), rechts der offene Chat. */
 @Composable
