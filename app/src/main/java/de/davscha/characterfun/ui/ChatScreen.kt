@@ -132,6 +132,7 @@ fun ChatScreen(vm: AppViewModel) {
         "tagebuch" -> TextResultDialog(tr("Tagebuch von %s", c.name), tr("%s schreibt Tagebuch …", c.name), { vm.writeDiary() }) { writing = null }
         "brief" -> LetterDialog(vm, c) { writing = null }
         "comic" -> ComicDialog(vm, c) { writing = null }
+        "buch" -> BookDialog(vm) { writing = null }
     }
     var writeMenu by remember { mutableStateOf(false) }
 
@@ -222,6 +223,12 @@ fun ChatScreen(vm: AppViewModel) {
                         leadingIcon = { Text("✉️") },
                         enabled = vm.chatReady,
                         onClick = { writeMenu = false; writing = "brief" },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(tr("Als Bilderbuch (PDF)")) },
+                        leadingIcon = { Text("📚") },
+                        enabled = talked && vm.chatReady,
+                        onClick = { writeMenu = false; writing = "buch" },
                     )
                     DropdownMenuItem(
                         text = { Text(tr("Als Comic-Bild")) },
@@ -1027,4 +1034,65 @@ private fun SceneBar(vm: AppViewModel, c: Character) {
             Text("📷 " + tr("Bild von der Szene"))
         }
     }
+}
+
+/** Bilderbuch: Gemma erzählt Seite für Seite, dazu die Bilder aus dem Chat – am Ende ein PDF */
+@Composable
+private fun BookDialog(vm: AppViewModel, onClose: () -> Unit) {
+    val context = LocalContext.current
+    var started by remember { mutableStateOf(false) }
+    var progress by remember { mutableStateOf("") }
+    var uri by remember { mutableStateOf<android.net.Uri?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+    if (started) LaunchedEffect(Unit) {
+        runCatching { vm.makePictureBook { progress = it } }
+            .onSuccess { uri = it; if (it == null) error = tr("PDF konnte nicht gespeichert werden") }
+            .onFailure { error = it.message ?: tr("Fehler") }
+    }
+    val running = started && uri == null && error == null
+    AlertDialog(
+        onDismissRequest = { if (!running) onClose() },
+        title = { Text("📚 " + tr("Bilderbuch")) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                when {
+                    !started -> {
+                        Text(tr("Gemma erzählt euer Gespräch als Geschichte – jedes Bild aus dem Chat bekommt eine eigene Seite. Am Ende gibt es ein PDF zum Blättern und Teilen."))
+                        Text(
+                            if (vm.chatImageCount == 0) tr("Im Chat sind noch keine Bilder – das Buch wird dann nur aus Text bestehen. Tipp: vorher ein paar Mal „Bild von der Szene“.")
+                            else tr("Bilder im Chat: %s", vm.chatImageCount),
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    error != null -> Text(error!!, color = MaterialTheme.colorScheme.error)
+                    uri != null -> Text(tr("Fertig! Das Bilderbuch liegt unter Dokumente/CharacterFun."))
+                    else -> Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                        Spacer(Modifier.width(12.dp))
+                        Text(progress.ifBlank { tr("Gleich geht's los …") })
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            when {
+                !started -> TextButton(onClick = { started = true }) { Text(tr("Buch erstellen")) }
+                uri != null -> TextButton(onClick = {
+                    val view = Intent(Intent.ACTION_VIEW).setDataAndType(uri, "application/pdf").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    try { context.startActivity(view) } catch (e: Exception) { Toast.makeText(context, tr("Keine App zum Öffnen von PDFs gefunden"), Toast.LENGTH_LONG).show() }
+                }) { Text(tr("Öffnen")) }
+                else -> TextButton(onClick = onClose, enabled = !running) { Text(tr("Schließen")) }
+            }
+        },
+        dismissButton = {
+            Row {
+                if (uri != null) TextButton(onClick = {
+                    val send = Intent(Intent.ACTION_SEND).setType("application/pdf").putExtra(Intent.EXTRA_STREAM, uri).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    context.startActivity(Intent.createChooser(send, null))
+                }) { Text(tr("Teilen")) }
+                if (!running) TextButton(onClick = onClose) { Text(if (uri != null) tr("Schließen") else tr("Abbrechen")) }
+            }
+        },
+    )
 }

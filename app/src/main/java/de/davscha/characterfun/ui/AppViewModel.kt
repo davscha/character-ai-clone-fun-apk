@@ -20,6 +20,7 @@ import de.davscha.characterfun.data.ChatMessage
 import de.davscha.characterfun.data.SavedChat
 import de.davscha.characterfun.data.Room
 import de.davscha.characterfun.data.AiHelpers
+import de.davscha.characterfun.ui.BookPage
 import de.davscha.characterfun.data.Fundus
 import de.davscha.characterfun.data.FundusItem
 import de.davscha.characterfun.data.FundusKind
@@ -1258,6 +1259,76 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
         val png = paint(ImagePrompt.join(loc?.tags, tags), null, (0..999_999_999L).random(), "multiple views", onProgress)
         return withContext(Dispatchers.IO) { repo.saveChatImageBytes(png) }
+    }
+
+    // ---------- Bilderbuch ----------
+
+    /** Wie viele Bilder der aktuelle Chat hat (für den Bilderbuch-Hinweis) */
+    val chatImageCount: Int get() = messages.count { it.image.isNotEmpty() }
+
+    /**
+     * Macht aus dem Chat ein Bilderbuch: Jedes Bild bekommt eine Seite, Gemma erzählt den Abschnitt davor.
+     * [onProgress] meldet den Stand als Text. Gibt die Adresse des PDFs zurück.
+     */
+    suspend fun makePictureBook(onProgress: (String) -> Unit): android.net.Uri? {
+        val c = chatCharacter ?: return null
+        // Abschnitte bilden: alles bis einschließlich eines Bildes gehört zu dessen Seite
+        val segments = mutableListOf<Pair<List<ChatMessage>, String?>>()
+        var current = mutableListOf<ChatMessage>()
+        for (m in messages) {
+            current += m
+            if (m.image.isNotEmpty() && java.io.File(m.image).exists()) {
+                segments += current.toList() to m.image
+                current = mutableListOf()
+            }
+        }
+        if (current.any { !it.note && it.text.isNotBlank() }) segments += current.toList() to null
+        // Ohne Bilder: in Häppchen von etwa acht Nachrichten teilen
+        val pages = if (segments.size == 1 && segments[0].second == null) {
+            segments[0].first.chunked(8).map { it to null }
+        } else segments
+        require(pages.isNotEmpty()) { tr("Im Chat ist noch nichts passiert.") }
+
+        val userName = aboutUser
+        val texts = mutableListOf<BookPage>()
+        var previous = ""
+        pages.forEachIndexed { i, (msgs, img) ->
+            onProgress(tr("Seite %s von %s wird erzählt …", i + 1, pages.size))
+            val dialog = msgs.joinToString("\n") { m ->
+                when {
+                    m.note -> "(${m.text})"
+                    m.image.isNotEmpty() && m.text.isBlank() -> if (m.fromUser) "(Nutzer zeigt ein Bild)" else "(Bild der Szene)"
+                    else -> "${if (m.fromUser) "Nutzer" else c.name}: ${Mood.strip(m.text)}"
+                }
+            }.takeLast(3500)
+            val text = askHelper(
+                "Du bist ein begabter Erzähler und schreibst Bilderbücher aus Chat-Verläufen. Du antwortest nur mit dem Erzähltext.",
+                buildString {
+                    if (userName.isNotBlank()) appendLine("Über den Nutzer: ${userName.trim()}")
+                    if (previous.isNotBlank()) appendLine("Bisher im Buch: ${previous.takeLast(600)}")
+                    appendLine("Nächster Abschnitt des Gesprächs mit ${c.name}:")
+                    appendLine(dialog)
+                    appendLine()
+                    append("Erzähle diesen Abschnitt in drei bis sechs Sätzen als Geschichte, dritte Person, Vergangenheit, auf ${I18n.lang.promptName}. ")
+                    if (img != null) append("Am Ende des Abschnitts steht ein Bild – der letzte Satz soll zu diesem Moment hinführen. ")
+                    append("Nenne den Nutzer bei seinem Namen, falls bekannt, sonst \"der Besucher\". Wörtliche Rede ist erlaubt. Keine Überschrift.")
+                },
+                0.8,
+            ).trim()
+            previous += " $text"
+            texts += BookPage(text, img)
+        }
+        onProgress(tr("Titel wird ausgedacht …"))
+        val title = askHelper(
+            "Du erfindest Buchtitel. Du antwortest nur mit dem Titel.",
+            "Hier ist eine kurze Geschichte mit ${c.name}:\n${previous.take(2500)}\n\nGib einen kurzen, schönen Buchtitel (höchstens sechs Wörter) auf ${I18n.lang.promptName} zurück.",
+            0.8,
+        ).lines().firstOrNull { it.isNotBlank() }?.trim()?.trim('"', '„', '“', '*', '#', ' ').orEmpty().ifBlank { c.name }
+        onProgress(tr("PDF wird gebaut …"))
+        val cover = repo.avatar(c) ?: fundusImage(c.appearancePreview)
+        return withContext(Dispatchers.IO) {
+            de.davscha.characterfun.ui.PictureBook.build(context, title, tr("Ein Bilderbuch mit %s", c.name), cover, texts)
+        }
     }
 
     /** Das gemalte Bild als Nachricht der Figur in den Einzelchat */
