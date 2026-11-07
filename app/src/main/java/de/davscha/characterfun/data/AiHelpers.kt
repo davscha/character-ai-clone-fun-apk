@@ -78,6 +78,7 @@ object AiHelpers {
      */
     val imageModes = listOf(
         "Was gerade passiert" to "Das Bild zeigt, was in diesem Moment passiert, wo du bist und was du siehst oder tust. Erzähle es als Handlung zwischen *Sternchen* in der Gegenwart, dazu ein, zwei Sätze wörtliche Rede an",
+        "Was ich gerade sehe" to "Das Bild zeigt genau das, was du in diesem Moment mit eigenen Augen vor dir siehst. Beschreibe aus deiner Sicht, was dir auffällt (Menschen, Kleidung, Blicke, Umgebung, Kleinigkeiten), und reagiere darauf – mit einer kleinen Geste zwischen *Sternchen* und wörtlicher Rede an",
         "Was passieren soll" to "Das Bild zeigt, was als Nächstes passieren soll – ein Ort, an den du willst, oder etwas, das du vorhast. Schlage es vor oder fang direkt damit an, mit Handlung zwischen *Sternchen* und wörtlicher Rede an",
         "Was ich denke" to "Das Bild zeigt, woran du gerade denkst oder wovon du träumst. Erzähle deine Gedanken und Gefühle dazu, gern mit einer kleinen Geste zwischen *Sternchen*, gerichtet an",
     )
@@ -100,6 +101,7 @@ object AiHelpers {
         appendLine("Schreibe die nächste Nachricht des Nutzers in Ich-Form. $mode $names.")
         appendLine("Ganz wichtig: Erwähne NIE, dass es ein Bild, Foto oder eine Aufnahme ist. Kein \"schau mal\", kein \"ich zeige dir\". Das Bild ist die Wirklichkeit im Rollenspiel – beschreibe es, als würdest du es gerade erleben.")
         appendLine("Lass die Einzelheiten aus dem Bild lebendig einfließen (Ort, Licht, Farben, Stimmung) und knüpfe natürlich an das bisherige Gespräch an.")
+        appendLine("Zeigt das Bild (laut Hinweis oder eindeutig) eine der Figuren aus dem Chat, dann ist das diese Figur selbst, wie sie gerade vor dir ist: sprich sie direkt an (\"du\"/\"Sie\", wie bisher im Gespräch), statt über sie in der dritten Person zu reden.")
         appendLine("Personen auf dem Bild: Lege ihr Geschlecht oder Alter nur fest, wenn es eindeutig ist oder im Hinweis steht – sonst schreibe neutral. Eine Person auf dem Bild ist nicht automatisch der Nutzer, außer der Hinweis sagt es.")
         append("Höchstens 80 Wörter, auf ${I18n.lang.promptName}.")
     }

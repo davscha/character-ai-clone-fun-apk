@@ -212,6 +212,7 @@ private val TABLE: Map<String, Array<String>> = mapOf(
     "Was ich denke" to arrayOf("What I’m thinking", "Lo que pienso", "Ce que je pense"),
     "Die KI schaut sich dein Bild an und macht daraus deine nächste Nachricht – als würdest du den Moment gerade erleben." to arrayOf("The AI looks at your image and turns it into your next message – as if you were living that moment right now.", "La IA mira tu imagen y la convierte en tu próximo mensaje, como si vivieras ese momento ahora mismo.", "L’IA regarde ton image et en fait ton prochain message – comme si tu vivais ce moment à l’instant."),
     "z. B. Ich bin am Strand angekommen / Das ist mein Kater Felix" to arrayOf("e.g. I’ve just arrived at the beach / This is my cat Felix", "p. ej. Acabo de llegar a la playa / Este es mi gato Felix", "p. ex. Je viens d’arriver à la plage / C’est mon chat Felix"),
+    "Was ich gerade sehe" to arrayOf("What I see right now", "Lo que veo ahora", "Ce que je vois"),
     "Abbrechen" to arrayOf("Cancel", "Cancelar", "Annuler"),
     "Neues Gespräch?" to arrayOf("New chat?", "¿Nueva conversación?", "Nouvelle conversation ?"),
     "Das bisherige Gespräch mit %s wird gelöscht. Angeheftete Erinnerungen bleiben." to arrayOf("The current chat with %s will be deleted. Pinned memories stay.", "Se borrará la conversación con %s. Los recuerdos fijados se mantienen.", "La conversation avec %s sera supprimée. Les souvenirs épinglés restent."),
