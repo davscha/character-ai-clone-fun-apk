@@ -254,6 +254,36 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** Alle Räume (Gruppenchats), neueste zuerst */
     val rooms = mutableStateListOf<Room>()
 
+    // ComfyUI und Fundus – stehen hier oben, weil init/refreshStorage sie schon braucht
+    var comfyHost by mutableStateOf(prefs.getString("comfy_host", null) ?: ollamaHost)
+        private set
+    var comfyPort by mutableStateOf(prefs.getInt("comfy_port", COMFY_DEFAULT_PORT))
+        private set
+    /** Ergebnis des letzten Verbindungstests (null = noch nicht getestet) */
+    var comfyStatus by mutableStateOf<String?>(null)
+        private set
+    var comfyOk by mutableStateOf(false)
+        private set
+    var comfyTesting by mutableStateOf(false)
+        private set
+    var basePositive by mutableStateOf(prefs.getString("bild_positiv", null) ?: DEFAULT_POSITIVE)
+        private set
+    var baseNegative by mutableStateOf(prefs.getString("bild_negativ", null) ?: DEFAULT_NEGATIVE)
+        private set
+    /** true = eigener Workflow importiert, sonst eingebaute Vorlage */
+    var customWorkflow by mutableStateOf(false)
+        private set
+    /** LoRAs, die ComfyUI kennt (nach dem Test) */
+    val loras = mutableStateListOf<String>()
+
+    var fundus by mutableStateOf(Fundus())
+        private set
+    /** Ids von Einträgen, deren Vorschau gerade gemalt wird */
+    val previewBusy = mutableStateMapOf<String, Boolean>()
+    /** Letzter Fehler beim Malen einer Vorschau (Id -> Text) */
+    val previewError = mutableStateMapOf<String, String>()
+
+
     /** Chats für "Weiter chatten", neueste zuerst */
     val recentChats = mutableStateListOf<SavedChat>()
 
@@ -1236,34 +1266,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     // ---------- Bilder mit ComfyUI (auf dem PC) ----------
-
-    var comfyHost by mutableStateOf(prefs.getString("comfy_host", null) ?: ollamaHost)
-        private set
-    var comfyPort by mutableStateOf(prefs.getInt("comfy_port", COMFY_DEFAULT_PORT))
-        private set
-    /** Ergebnis des letzten Verbindungstests (null = noch nicht getestet) */
-    var comfyStatus by mutableStateOf<String?>(null)
-        private set
-    var comfyOk by mutableStateOf(false)
-        private set
-    var comfyTesting by mutableStateOf(false)
-        private set
-    var basePositive by mutableStateOf(prefs.getString("bild_positiv", null) ?: DEFAULT_POSITIVE)
-        private set
-    var baseNegative by mutableStateOf(prefs.getString("bild_negativ", null) ?: DEFAULT_NEGATIVE)
-        private set
-    /** true = eigener Workflow importiert, sonst eingebaute Vorlage */
-    var customWorkflow by mutableStateOf(false)
-        private set
-    /** LoRAs, die ComfyUI kennt (nach dem Test) */
-    val loras = mutableStateListOf<String>()
-
-    var fundus by mutableStateOf(Fundus())
-        private set
-    /** Ids von Einträgen, deren Vorschau gerade gemalt wird */
-    val previewBusy = mutableStateMapOf<String, Boolean>()
-    /** Letzter Fehler beim Malen einer Vorschau (Id -> Text) */
-    val previewError = mutableStateMapOf<String, String>()
 
     private val comfy get() = ComfyClient(comfyHost, comfyPort)
     private val workflowTemplate get() = repo.loadWorkflow() ?: ComfyClient.DEFAULT_WORKFLOW
