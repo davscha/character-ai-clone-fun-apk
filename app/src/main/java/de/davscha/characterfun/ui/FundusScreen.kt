@@ -110,14 +110,9 @@ fun FundusScreen(vm: AppViewModel) {
                 FilterChip(selected = tab == 1, onClick = { tab = 1 }, label = { Text("👗 " + tr("Kleidung") + " (${vm.fundus.clothing.size})") })
                 FilterChip(selected = tab == 2, onClick = { tab = 2 }, label = { Text("🎨 " + tr("Stile") + " (${vm.fundus.styles.size})") })
             }
-            if (!vm.comfyConfigured) {
-                Text(
-                    tr("Für Vorschaubilder erst ComfyUI in den Einstellungen eintragen."),
-                    fontSize = 13.sp,
-                    color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
-                )
-            }
+            // Wie bei Ollama: PC nicht erreichbar -> Bild-Knöpfe ausgegraut
+            androidx.compose.runtime.LaunchedEffect(Unit) { if (!vm.comfyOk) vm.testComfy() }
+            ComfyStatusBar(vm, Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
             LazyVerticalGrid(
                 columns = GridCells.Adaptive(minSize = 200.dp),
                 contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 96.dp),
@@ -259,7 +254,7 @@ private fun FundusItemDialog(vm: AppViewModel, kind: FundusKind, original: Fundu
                 vm.previewError[item.id]?.let { Text(it, fontSize = 12.sp, color = MaterialTheme.colorScheme.error) }
                 OutlinedButton(
                     onClick = { vm.paintPreview(kind, item.copy(preview = preview)) },
-                    enabled = vm.comfyConfigured && item.tags.isNotBlank() && vm.previewBusy[item.id] != true,
+                    enabled = vm.comfyReady && item.tags.isNotBlank() && vm.previewBusy[item.id] != true,
                 ) {
                     Icon(Icons.Default.Brush, null, Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp))
@@ -311,7 +306,7 @@ private fun StyleDialog(vm: AppViewModel, original: StyleItem, onClose: () -> Un
                         label = { Text(tr("LoRA-Datei")) },
                         singleLine = true,
                         trailingIcon = {
-                            TextButton(onClick = { if (vm.loras.isEmpty()) vm.testComfy() else loraMenu = true }) {
+                            TextButton(onClick = { if (vm.loras.isEmpty()) vm.testComfy() else loraMenu = true }, enabled = vm.comfyReady || vm.loras.isEmpty()) {
                                 Text(if (vm.loras.isEmpty()) tr("Liste laden") else tr("Auswählen"))
                             }
                         },
@@ -340,7 +335,7 @@ private fun StyleDialog(vm: AppViewModel, original: StyleItem, onClose: () -> Un
                 vm.previewError[style.id]?.let { Text(it, fontSize = 12.sp, color = MaterialTheme.colorScheme.error) }
                 OutlinedButton(
                     onClick = { vm.paintStylePreview(style.copy(preview = preview)) },
-                    enabled = vm.comfyConfigured && style.lora.isNotBlank() && vm.previewBusy[style.id] != true,
+                    enabled = vm.comfyReady && style.lora.isNotBlank() && vm.previewBusy[style.id] != true,
                 ) {
                     Icon(Icons.Default.Brush, null, Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp))
@@ -363,4 +358,31 @@ private fun StyleDialog(vm: AppViewModel, original: StyleItem, onClose: () -> Un
             }
         },
     )
+}
+
+/** Hinweis, wenn ComfyUI fehlt oder der PC nicht erreichbar ist – mit „Erneut prüfen“ */
+@Composable
+fun ComfyStatusBar(vm: AppViewModel, modifier: Modifier = Modifier) {
+    when {
+        !vm.comfyConfigured -> Text(
+            tr("Für Bilder erst ComfyUI in den Einstellungen eintragen."),
+            fontSize = 13.sp,
+            color = MaterialTheme.colorScheme.error,
+            modifier = modifier,
+        )
+        vm.comfyTesting && !vm.comfyOk -> Row(modifier, verticalAlignment = Alignment.CenterVertically) {
+            CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+            Spacer(Modifier.width(8.dp))
+            Text(tr("Prüfe Verbindung zum PC …"), fontSize = 13.sp)
+        }
+        !vm.comfyOk -> Row(modifier, verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                tr("PC bzw. ComfyUI nicht erreichbar – Bilder sind ausgegraut."),
+                fontSize = 13.sp,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.weight(1f, fill = false),
+            )
+            TextButton(onClick = { vm.testComfy() }) { Text(tr("Erneut prüfen")) }
+        }
+    }
 }

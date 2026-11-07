@@ -31,6 +31,7 @@ class MainActivity : ComponentActivity() {
             // Zurück aus den Einstellungen? Dann Speicherort neu prüfen
             LifecycleResumeEffect(Unit) {
                 viewModel.refreshStorage()
+                viewModel.testComfy() // PC an? Sonst werden die Bild-Knöpfe ausgegraut
                 onPauseOrDispose { }
             }
             CharacterFunTheme {

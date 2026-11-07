@@ -1268,6 +1268,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val comfy get() = ComfyClient(comfyHost, comfyPort)
     private val workflowTemplate get() = repo.loadWorkflow() ?: ComfyClient.DEFAULT_WORKFLOW
     val comfyConfigured get() = comfyHost.isNotBlank()
+    /** ComfyUI eingetragen UND erreichbar – sonst sind alle Bild-Knöpfe ausgegraut */
+    val comfyReady get() = comfyConfigured && comfyOk
 
     fun changeComfyHost(h: String) {
         comfyHost = h.trim()
@@ -1334,7 +1336,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         require(comfyConfigured) { tr("ComfyUI ist noch nicht eingerichtet (Einstellungen → Bilder).") }
         val st = style ?: fundus.defaultStyle
         val positive = ImagePrompt.join(basePositive, st?.trigger, tags)
-        return comfy.generate(workflowTemplate, positive, baseNegative, seed, st?.lora, st?.strength ?: 1f, onProgress = onProgress)
+        try {
+            return comfy.generate(workflowTemplate, positive, baseNegative, seed, st?.lora, st?.strength ?: 1f, onProgress = onProgress)
+        } catch (e: java.io.IOException) {
+            // PC aus oder ComfyUI beendet: Knöpfe ausgrauen, bis der nächste Test klappt
+            if (e is java.net.ConnectException || e is java.net.SocketTimeoutException || e is java.net.NoRouteToHostException) {
+                comfyOk = false
+                comfyStatus = tr("Nicht erreichbar – läuft ComfyUI mit --listen? (%s)", e.message ?: e.javaClass.simpleName)
+            }
+            throw e
+        }
     }
 
     fun fundusImage(name: String) = repo.fundusImage(name)
