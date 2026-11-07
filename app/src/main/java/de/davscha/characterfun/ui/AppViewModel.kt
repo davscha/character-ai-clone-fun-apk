@@ -20,6 +20,9 @@ import de.davscha.characterfun.data.ChatMessage
 import de.davscha.characterfun.data.SavedChat
 import de.davscha.characterfun.data.Room
 import de.davscha.characterfun.data.AiHelpers
+import de.davscha.characterfun.data.Mood
+import de.davscha.characterfun.data.RandomCharacter
+import de.davscha.characterfun.data.Writings
 import de.davscha.characterfun.data.RoomGameState
 import de.davscha.characterfun.data.RoomGameType
 import de.davscha.characterfun.data.RoomGames
@@ -772,7 +775,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             summarize(c, history.subList(summarizedUpTo, end), end)
             if (summarizedUpTo == before) break // Zusammenfassen hat nicht geklappt – ohne weiter
         }
-        val prompt = PromptBuilder.build(c, aboutUser, memories.toList(), summary, game)
+        val prompt = PromptBuilder.build(c, aboutUser, memories.toList(), summary, game, moodEnabled)
         withContext(Dispatchers.IO) {
             engine.startConversation(prompt, kept.map { it.fromUser to historyText(it) }, temperature)
         }
@@ -1021,6 +1024,40 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun clearSuggestions() = suggestions.clear()
+
+    // ---------- Spaß: Stimmung, Tagebuch, Briefe, Zufallsfigur ----------
+
+    /** Stimmungs-Anzeige: die Figur zeigt ihre Laune als Emoji */
+    var moodEnabled by mutableStateOf(prefs.getBoolean("stimmung", true))
+        private set
+
+    fun toggleMood() {
+        moodEnabled = !moodEnabled
+        prefs.edit().putBoolean("stimmung", moodEnabled).apply()
+        needsRebuild = true
+    }
+
+    /** Aktuelle Laune der Figur (aus ihrer letzten Antwort) */
+    val currentMood: String? get() = if (!moodEnabled) null else messages.lastOrNull { !it.fromUser }?.let { Mood.of(it.text) }
+
+    private fun characterSystem(c: Character) = PromptBuilder.build(c, aboutUser, memories.toList(), summary)
+
+    suspend fun writeDiary(): String {
+        val c = chatCharacter ?: return ""
+        return Mood.strip(askHelper(characterSystem(c), Writings.diaryPrompt(recentMessages(5000), c.name), 0.9))
+    }
+
+    suspend fun writeLetter(occasion: String, extra: String): String {
+        val c = chatCharacter ?: return ""
+        return Mood.strip(askHelper(characterSystem(c), Writings.letterPrompt(occasion, extra), 0.9))
+    }
+
+    /** Würfelt eine neue Figur, speichert sie und gibt sie zurück */
+    suspend fun createRandomCharacter(onProgress: (Int) -> Unit): Character {
+        val made = generateProfile(RandomCharacter.notes(), Character(), onProgress)
+        saveCharacter(made)
+        return made
+    }
 
     // ---------- KI-Hilfen ----------
 

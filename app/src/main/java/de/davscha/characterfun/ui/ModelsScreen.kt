@@ -157,6 +157,17 @@ fun ModelsScreen(vm: AppViewModel) {
                     onValueChange = { vm.changeTemperature((it * 10).toInt() / 10.0) },
                     valueRange = 0.1f..1.5f,
                 )
+
+                SectionTitle(tr("Stimmungs-Anzeige"))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        tr("Die Figur zeigt ihre Laune als Emoji neben dem Namen, z. B. 😄 oder 😠."),
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f),
+                    )
+                    androidx.compose.material3.Switch(checked = vm.moodEnabled, onCheckedChange = { vm.toggleMood() })
+                }
                 Spacer(Modifier.height(32.dp))
             }
         }

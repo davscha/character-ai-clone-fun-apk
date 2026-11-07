@@ -15,6 +15,7 @@ object PromptBuilder {
         memories: List<String> = emptyList(),
         summary: String = "",
         game: GameState? = null,
+        mood: Boolean = false,
     ): String = buildString {
         appendLine("Du spielst in einem Rollenspiel-Chat die Figur \"${c.name}\".")
         if (c.shortDescription.isNotBlank()) appendLine(c.shortDescription.trim())
@@ -49,6 +50,10 @@ object PromptBuilder {
         appendLine("- ${c.replyLength.rule} Keine Aufzählungen, keine Überschriften.")
         appendLine("- Antworte auf ${I18n.lang.promptName}, außer deine Beschreibung sagt etwas anderes.")
         append("- Handlungen und Gesten schreibst du zwischen Sternchen, z. B. *grinst*.")
+        if (mood) {
+            appendLine()
+            append("- Beende jede Antwort mit genau einem Emoji in eckigen Klammern, das deine aktuelle Stimmung zeigt, z. B. [😄], [😠], [😢] oder [🤔]. Deine Stimmung darf sich im Gespräch ändern.")
+        }
         if (game != null) {
             appendLine()
             appendLine()

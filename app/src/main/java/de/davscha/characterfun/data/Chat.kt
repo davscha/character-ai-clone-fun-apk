@@ -58,7 +58,7 @@ data class SavedChat(
     val game: GameState? = null,
 ) {
     /** Letzte Nachricht für die "Weiter chatten"-Leiste */
-    val preview: String get() = messages.lastOrNull()?.text.orEmpty().replace('\n', ' ')
+    val preview: String get() = Mood.strip(messages.lastOrNull()?.text.orEmpty()).replace('\n', ' ')
 
     fun toJson(): JSONObject = JSONObject()
         .put("figur", characterId)

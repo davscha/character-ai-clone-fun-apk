@@ -1,5 +1,7 @@
 package de.davscha.characterfun.ui
 
+import androidx.compose.foundation.layout.size
+
 import de.davscha.characterfun.i18n.tr
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.material.icons.filled.Share
@@ -78,6 +80,22 @@ fun GalleryScreen(vm: AppViewModel) {
     var query by rememberSaveable { mutableStateOf("") }
     // null = "Alle", "eigene" = selbst erstellte, sonst Name der Kategorie
     var filter by rememberSaveable { mutableStateOf<String?>(null) }
+    // Zufallsfigur: null = läuft nicht, sonst geschriebene Zeichen
+    var randomProgress by remember { mutableStateOf<Int?>(null) }
+    randomProgress?.let { p ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = {},
+            confirmButton = {},
+            title = { Text("🎲 " + tr("Zufallsfigur")) },
+            text = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    androidx.compose.material3.CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.width(12.dp))
+                    Text(if (p == 0) tr("Gemma würfelt eine Figur aus …") else tr("Gemma schreibt das Profil … (%s Zeichen)", p))
+                }
+            },
+        )
+    }
 
     val shown = vm.characters.filter { c ->
         val matchesFilter = when (filter) {
@@ -124,6 +142,19 @@ fun GalleryScreen(vm: AppViewModel) {
                 Spacer(Modifier.width(12.dp))
                 val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
                     if (uri != null) scope.launch { Toast.makeText(context, vm.importCharacter(uri), Toast.LENGTH_LONG).show() }
+                }
+                TextButton(onClick = {
+                    randomProgress = 0
+                    scope.launch {
+                        runCatching { vm.createRandomCharacter { randomProgress = it } }
+                            .onSuccess { vm.navigate(Screen.Editor(it.id)) }
+                            .onFailure { Toast.makeText(context, it.message ?: tr("Fehler"), Toast.LENGTH_LONG).show() }
+                        randomProgress = null
+                    }
+                }, enabled = randomProgress == null) {
+                    Text("🎲")
+                    Spacer(Modifier.width(6.dp))
+                    Text(tr("Zufallsfigur"))
                 }
                 TextButton(onClick = { importLauncher.launch(arrayOf("application/json", "application/octet-stream", "*/*")) }) {
                     Icon(Icons.Default.FileOpen, null)

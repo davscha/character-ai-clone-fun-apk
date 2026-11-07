@@ -88,7 +88,7 @@ class Speaker(
     companion object {
         /** *Handlungen zwischen Sternchen* werden nicht vorgelesen. */
         fun cleanForSpeech(text: String) =
-            text.replace(Regex("\\*[^*]*\\*"), " ").replace(Regex("\\s+"), " ").trim()
+            de.davscha.characterfun.data.Mood.strip(text).replace(Regex("\\*[^*]*\\*"), " ").replace(Regex("\\s+"), " ").trim()
     }
 
     fun shutdown() {

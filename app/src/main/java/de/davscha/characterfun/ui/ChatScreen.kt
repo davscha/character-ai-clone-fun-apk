@@ -13,6 +13,10 @@ import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
 import de.davscha.characterfun.data.AiHelpers
+import de.davscha.characterfun.data.Mood
+import de.davscha.characterfun.data.Writings
+import androidx.compose.material.icons.filled.HistoryEdu
+import androidx.compose.ui.graphics.asImageBitmap
 import de.davscha.characterfun.data.Game
 import de.davscha.characterfun.data.GameState
 import de.davscha.characterfun.data.Games
@@ -121,8 +125,15 @@ fun ChatScreen(vm: AppViewModel) {
     if (showMemories) MemoriesDialog(vm, c) { showMemories = false }
     var showGames by remember { mutableStateOf(false) }
     if (showGames) GamePickerDialog(vm, c) { showGames = false }
-    var showStory by remember { mutableStateOf(false) }
-    if (showStory) StoryDialog(vm, c) { showStory = false }
+    // Schreib-Menü: Geschichte, Tagebuch, Brief, Comic
+    var writing by remember { mutableStateOf<String?>(null) }
+    when (writing) {
+        "geschichte" -> TextResultDialog(tr("Euer Gespräch als Geschichte"), tr("%s erzählt …", c.name), { vm.chatAsStory() }) { writing = null }
+        "tagebuch" -> TextResultDialog(tr("Tagebuch von %s", c.name), tr("%s schreibt Tagebuch …", c.name), { vm.writeDiary() }) { writing = null }
+        "brief" -> LetterDialog(vm, c) { writing = null }
+        "comic" -> ComicDialog(vm, c) { writing = null }
+    }
+    var writeMenu by remember { mutableStateOf(false) }
 
     // Nachricht bearbeiten
     var editIndex by remember { mutableStateOf(-1) }
@@ -172,7 +183,7 @@ fun ChatScreen(vm: AppViewModel) {
             Avatar(c, avatarFile, size = 44.dp)
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                Text(c.name, fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
+                Text(c.name + (vm.currentMood?.let { "  $it" } ?: ""), fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
                 Text(
                     statusLine(vm),
                     fontSize = 12.sp,
@@ -188,8 +199,37 @@ fun ChatScreen(vm: AppViewModel) {
                     tint = if (vm.autoRead) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            IconButton(onClick = { showStory = true }, enabled = vm.chatReady && !vm.isGenerating && vm.messages.any { it.fromUser }) {
-                Icon(Icons.AutoMirrored.Filled.MenuBook, tr("Als Geschichte"))
+            Box {
+                IconButton(onClick = { writeMenu = true }, enabled = !vm.isGenerating) {
+                    Icon(Icons.Default.HistoryEdu, tr("Schreiben lassen"))
+                }
+                DropdownMenu(expanded = writeMenu, onDismissRequest = { writeMenu = false }) {
+                    val talked = vm.messages.any { it.fromUser }
+                    DropdownMenuItem(
+                        text = { Text(tr("Als Geschichte")) },
+                        leadingIcon = { Icon(Icons.AutoMirrored.Filled.MenuBook, null) },
+                        enabled = talked && vm.chatReady,
+                        onClick = { writeMenu = false; writing = "geschichte" },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(tr("Tagebucheintrag")) },
+                        leadingIcon = { Text("📔") },
+                        enabled = talked && vm.chatReady,
+                        onClick = { writeMenu = false; writing = "tagebuch" },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(tr("Brief schreiben lassen")) },
+                        leadingIcon = { Text("✉️") },
+                        enabled = vm.chatReady,
+                        onClick = { writeMenu = false; writing = "brief" },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(tr("Als Comic-Bild")) },
+                        leadingIcon = { Text("💬") },
+                        enabled = vm.messages.size >= 2,
+                        onClick = { writeMenu = false; writing = "comic" },
+                    )
+                }
             }
             IconButton(onClick = { showGames = true }, enabled = vm.chatReady && !vm.isGenerating) {
                 Icon(Icons.Default.SportsEsports, tr("Spiel starten"), tint = MaterialTheme.colorScheme.secondary)
@@ -247,7 +287,7 @@ fun ChatScreen(vm: AppViewModel) {
                         c, avatarFile, msg, streaming, if (canReroll) vm else null, vm.summarizing,
                         busy = vm.isGenerating || vm.suggesting,
                         onPin = { vm.addMemory(msg.text) },
-                        onEdit = { editText = msg.text; editIndex = i },
+                        onEdit = { editText = Mood.strip(msg.text); editIndex = i },
                         onDelete = { vm.deleteMessage(i) },
                         speaking = vm.speakingId == "msg-$i",
                         onSpeak = { vm.speak(i) },
@@ -414,7 +454,7 @@ private fun MessageBubble(
             ) {
                 Text(
                     text = roleplayText(
-                        msg.text.ifEmpty { if (streaming && summarizing) tr("*erinnert sich an das Bisherige …*") else if (streaming) "…" else "" }
+                        Mood.strip(msg.text).ifEmpty { if (streaming && summarizing) tr("*erinnert sich an das Bisherige …*") else if (streaming) "…" else "" }
                     ),
                     fontSize = 16.sp,
                     lineHeight = 22.sp,
@@ -769,47 +809,158 @@ private fun GameBanner(vm: AppViewModel, state: GameState) {
     }
 }
 
-/** Das Gespräch als kurze Geschichte – zum Nachlesen, Kopieren und Teilen */
+/** Ein Text der KI (Geschichte, Tagebuch …) – zum Nachlesen, Kopieren und Teilen */
 @Composable
-private fun StoryDialog(vm: AppViewModel, c: Character, onClose: () -> Unit) {
-    var story by remember { mutableStateOf<String?>(null) }
+private fun TextResultDialog(title: String, busyText: String, loader: suspend () -> String, onClose: () -> Unit) {
+    var result by remember { mutableStateOf<String?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
-    val context = LocalContext.current
     LaunchedEffect(Unit) {
-        runCatching { vm.chatAsStory() }.onSuccess { story = it }.onFailure { error = it.message ?: tr("Fehler") }
+        runCatching { loader() }.onSuccess { result = it }.onFailure { error = it.message ?: tr("Fehler") }
     }
     AlertDialog(
         onDismissRequest = onClose,
-        title = { Text(tr("Euer Gespräch als Geschichte")) },
+        title = { Text(title) },
+        text = { ResultBody(result, error, busyText) },
+        confirmButton = { TextButton(onClick = onClose) { Text(tr("Fertig")) } },
+        dismissButton = { result?.let { CopyShareButtons(it) } },
+    )
+}
+
+@Composable
+private fun ResultBody(result: String?, error: String?, busyText: String) {
+    Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        when {
+            error != null -> Text(error, color = MaterialTheme.colorScheme.error)
+            result == null -> Row(verticalAlignment = Alignment.CenterVertically) {
+                CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                Spacer(Modifier.width(12.dp))
+                Text(busyText)
+            }
+            else -> {
+                val lines = result.trim().lines()
+                // Erste Zeile als Titel, wenn sie kurz ist (Geschichte); sonst alles als Text
+                if (lines.size > 1 && lines.first().length < 70) {
+                    Text(lines.first().trim('#', '*', ' '), fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                    Text(roleplayText(lines.drop(1).joinToString("\n").trim()), fontSize = 15.sp, lineHeight = 22.sp)
+                } else Text(roleplayText(result.trim()), fontSize = 15.sp, lineHeight = 22.sp)
+            }
+        }
+    }
+}
+
+@Composable
+private fun CopyShareButtons(text: String) {
+    val context = LocalContext.current
+    Row {
+        IconButton(onClick = {
+            val cm = context.getSystemService(android.content.ClipboardManager::class.java)
+            cm.setPrimaryClip(android.content.ClipData.newPlainText("Character Fun", text))
+            Toast.makeText(context, tr("Kopiert"), Toast.LENGTH_SHORT).show()
+        }) { Icon(Icons.Default.ContentCopy, tr("Kopieren")) }
+        IconButton(onClick = {
+            val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text)
+            context.startActivity(Intent.createChooser(send, null))
+        }) { Icon(Icons.Default.Share, tr("Teilen")) }
+    }
+}
+
+/** Brief schreiben lassen: Anlass wählen, optional Wünsche dazu */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun LetterDialog(vm: AppViewModel, c: Character, onClose: () -> Unit) {
+    var occasion by remember { mutableStateOf(Writings.occasions.first()) }
+    var extra by remember { mutableStateOf("") }
+    var started by remember { mutableStateOf(false) }
+    var result by remember { mutableStateOf<String?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+    AlertDialog(
+        onDismissRequest = onClose,
+        title = { Text(tr("Brief von %s", c.name)) },
         text = {
-            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                when {
-                    error != null -> Text(error!!, color = MaterialTheme.colorScheme.error)
-                    story == null -> Row(verticalAlignment = Alignment.CenterVertically) {
-                        CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-                        Spacer(Modifier.width(12.dp))
-                        Text(tr("%s erzählt …", c.name))
-                    }
-                    else -> {
-                        val lines = story!!.lines()
-                        Text(lines.first().trim('#', '*', ' '), fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                        Text(roleplayText(lines.drop(1).joinToString("\n").trim()), fontSize = 15.sp, lineHeight = 22.sp)
+            if (started) ResultBody(result, error, tr("%s schreibt …", c.name))
+            else Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Writings.occasions.forEach { o ->
+                        androidx.compose.material3.FilterChip(selected = occasion == o, onClick = { occasion = o }, label = { Text(tr(o.first)) })
                     }
                 }
+                OutlinedTextField(
+                    value = extra,
+                    onValueChange = { extra = it },
+                    label = { Text(tr("Wünsche (optional)")) },
+                    placeholder = { Text(tr("z. B. Erwähne meinen Hund Bello")) },
+                    modifier = Modifier.fillMaxWidth(),
+                    maxLines = 3,
+                )
             }
         },
-        confirmButton = { TextButton(onClick = onClose) { Text(tr("Fertig")) } },
+        confirmButton = {
+            if (!started) TextButton(onClick = {
+                started = true
+                scope.launch {
+                    runCatching { vm.writeLetter(occasion.second, extra) }.onSuccess { result = it }.onFailure { error = it.message ?: tr("Fehler") }
+                }
+            }) { Text(tr("Schreiben lassen")) }
+            else TextButton(onClick = onClose) { Text(tr("Fertig")) }
+        },
         dismissButton = {
-            if (story != null) Row {
-                IconButton(onClick = {
-                    val cm = context.getSystemService(android.content.ClipboardManager::class.java)
-                    cm.setPrimaryClip(android.content.ClipData.newPlainText("Geschichte", story))
-                    Toast.makeText(context, tr("Kopiert"), Toast.LENGTH_SHORT).show()
-                }) { Icon(Icons.Default.ContentCopy, tr("Kopieren")) }
-                IconButton(onClick = {
-                    val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, story)
+            if (!started) TextButton(onClick = onClose) { Text(tr("Abbrechen")) }
+            else result?.let { CopyShareButtons(it) }
+        },
+    )
+}
+
+/** Die letzten Nachrichten als Comic-Bild – speichern oder teilen */
+@Composable
+private fun ComicDialog(vm: AppViewModel, c: Character, onClose: () -> Unit) {
+    val context = LocalContext.current
+    val msgs = vm.messages.filter { it.text.isNotBlank() }
+    val maxCount = msgs.size.coerceAtMost(20).coerceAtLeast(1)
+    var count by remember { mutableStateOf(msgs.size.coerceAtMost(6).toFloat()) }
+    val n = count.toInt().coerceIn(1, maxCount)
+    val avatar = vm.repo.avatar(c)
+    val bitmap = remember(n) { ComicRenderer.render(c, avatar, msgs.takeLast(n), tr("Du"), vm.currentMood) }
+    fun save(): android.net.Uri? = ComicRenderer.saveToGallery(context, bitmap, "comic-${c.name.filter { it.isLetterOrDigit() }}-${System.currentTimeMillis()}")
+    AlertDialog(
+        onDismissRequest = onClose,
+        title = { Text(tr("Als Comic-Bild")) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (maxCount > 1) {
+                    Text(tr("Letzte %s Nachrichten", n), fontSize = 13.sp)
+                    androidx.compose.material3.Slider(
+                        value = count,
+                        onValueChange = { count = it },
+                        valueRange = 1f..maxCount.toFloat(),
+                        steps = (maxCount - 2).coerceAtLeast(0),
+                    )
+                }
+                androidx.compose.foundation.Image(
+                    bitmap = bitmap.asImageBitmap(),
+                    contentDescription = null,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.fillMaxWidth().heightIn(max = 460.dp),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                val uri = save()
+                if (uri != null) {
+                    val send = Intent(Intent.ACTION_SEND).setType("image/png").putExtra(Intent.EXTRA_STREAM, uri)
+                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                     context.startActivity(Intent.createChooser(send, null))
-                }) { Icon(Icons.Default.Share, tr("Teilen")) }
+                }
+            }) { Text(tr("Teilen")) }
+        },
+        dismissButton = {
+            Row {
+                TextButton(onClick = {
+                    val ok = save() != null
+                    Toast.makeText(context, if (ok) tr("Gespeichert unter Bilder/CharacterFun") else tr("Fehler"), Toast.LENGTH_LONG).show()
+                }) { Text(tr("Speichern")) }
+                TextButton(onClick = onClose) { Text(tr("Schließen")) }
             }
         },
     )

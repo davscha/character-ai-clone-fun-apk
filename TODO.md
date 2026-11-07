@@ -45,11 +45,11 @@ Stand: 7. November 2026. Abhaken mit `[x]`, sobald etwas fertig ist.
 
 ## Runde 2 – Spaß (Etappe D)
 
-- [ ] **24. Zufallsfigur** – die KI würfelt eine komplett neue Figur
-- [ ] **25. Stimmungs-Anzeige** – Laune der Figur als Emoji, ändert sich im Gespräch
-- [ ] **26. Figuren-Tagebuch** – nach dem Chat ein Tagebucheintrag der Figur über dich
-- [ ] **27. Brief schreiben lassen** – Geburtstagsbrief, Weihnachtsgedicht usw.
-- [ ] **28. Chat als Comic-Bild exportieren** – hübscher Screenshot zum Teilen
+- [x] **24. Zufallsfigur** – die KI würfelt eine komplett neue Figur
+- [x] **25. Stimmungs-Anzeige** – Laune der Figur als Emoji, ändert sich im Gespräch
+- [x] **26. Figuren-Tagebuch** – nach dem Chat ein Tagebucheintrag der Figur über dich
+- [x] **27. Brief schreiben lassen** – Geburtstagsbrief, Weihnachtsgedicht usw.
+- [x] **28. Chat als Comic-Bild exportieren** – hübscher Screenshot zum Teilen
 
 ## Runde 2 – Praktisches (Etappe E)
 
