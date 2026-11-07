@@ -1,5 +1,7 @@
 package de.davscha.characterfun.ui
 
+import androidx.compose.foundation.layout.heightIn
+
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.speech.RecognizerIntent
@@ -145,6 +147,7 @@ fun RoomScreen(vm: AppViewModel) {
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outline)
         room.game?.let { RoomGameBanner(vm, it) }
+        RoomSceneBar(vm, members)
 
         LazyColumn(
             state = listState,
@@ -250,7 +253,22 @@ private fun RoomBubble(
             if (!m.fromUser) {
                 Text(c?.name ?: "?", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(start = 4.dp, bottom = 2.dp))
             }
-            Box(
+            if (m.image.isNotEmpty()) {
+                var full by remember { mutableStateOf(false) }
+                if (full) FullImageDialog(m.image) { full = false }
+                coil.compose.AsyncImage(
+                    model = java.io.File(m.image),
+                    contentDescription = null,
+                    contentScale = androidx.compose.ui.layout.ContentScale.Fit,
+                    modifier = Modifier
+                        .padding(bottom = 6.dp)
+                        .widthIn(max = 480.dp)
+                        .heightIn(max = 480.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .combinedClickable(onClick = { full = true }, onLongClick = { if (!vm.roomBusy) menuOpen = true }),
+                )
+            }
+            if (m.text.isNotEmpty() || streaming || m.image.isEmpty()) Box(
                 Modifier
                     .widthIn(max = 640.dp)
                     .clip(RoundedCornerShape(16.dp))
@@ -259,6 +277,15 @@ private fun RoomBubble(
                     .padding(horizontal = 14.dp, vertical = 10.dp)
             ) {
                 Text(roleplayText(m.text.ifEmpty { if (streaming) "…" else "" }), fontSize = 16.sp, lineHeight = 22.sp)
+                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    DropdownMenuItem(
+                        text = { Text(tr("Löschen"), color = MaterialTheme.colorScheme.error) },
+                        leadingIcon = { Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error) },
+                        onClick = { menuOpen = false; onDelete() },
+                    )
+                }
+            }
+            if (m.text.isEmpty() && m.image.isNotEmpty()) {
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                     DropdownMenuItem(
                         text = { Text(tr("Löschen"), color = MaterialTheme.colorScheme.error) },
@@ -445,6 +472,38 @@ private fun RoomGameBanner(vm: AppViewModel, g: RoomGameState) {
                 }
             }
             TextButton(onClick = { vm.endRoomGame() }) { Text(tr("Spiel beenden")) }
+        }
+    }
+}
+
+/** Leiste im Raum: gemeinsamer Ort und Bild von der Szene (eine Figur pro Bild) */
+@Composable
+private fun RoomSceneBar(vm: AppViewModel, members: List<de.davscha.characterfun.data.Character>) {
+    var pickFor by remember { mutableStateOf(false) }
+    var sceneFor by remember { mutableStateOf<de.davscha.characterfun.data.Character?>(null) }
+    val room = vm.currentRoom ?: return
+    sceneFor?.let { c ->
+        SceneImageDialog(
+            vm, c, room.locationId, "",
+            recent = { vm.recentRoomText() },
+            allowOutfit = false,
+            onClose = { sceneFor = null },
+        ) { path, loc, _ ->
+            vm.setRoomLocation(loc)
+            vm.addRoomImage(c.id, path)
+        }
+    }
+    Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+        LocationPicker(vm, vm.roomLocation, enabled = !vm.roomBusy) { vm.setRoomLocation(it) }
+        Spacer(Modifier.weight(1f))
+        Box {
+            TextButton(onClick = { pickFor = true }, enabled = vm.comfyReady && !vm.roomBusy) { Text("📷 " + tr("Bild von der Szene")) }
+            DropdownMenu(expanded = pickFor, onDismissRequest = { pickFor = false }) {
+                Text(tr("Wer soll aufs Bild?"), fontSize = 12.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
+                members.forEach { c ->
+                    DropdownMenuItem(text = { Text("${c.emoji} ${c.name}") }, onClick = { pickFor = false; sceneFor = c })
+                }
+            }
         }
     }
 }

@@ -22,6 +22,7 @@ object PromptBuilder {
         game: GameState? = null,
         mood: Boolean = false,
         userGender: Gender = UserGender.value,
+        scene: String = "",
     ): String = buildString {
         appendLine("Du spielst in einem Rollenspiel-Chat die Figur \"${c.name}\".")
         if (c.shortDescription.isNotBlank()) appendLine(c.shortDescription.trim())
@@ -37,6 +38,10 @@ object PromptBuilder {
         if (c.scenario.isNotBlank()) {
             appendLine()
             appendLine("Ausgangssituation des Gesprächs: ${c.scenario.trim()}")
+        }
+        if (scene.isNotBlank()) {
+            appendLine()
+            appendLine("Aktuelle Szene (gilt jetzt, beschreibe Ort und Kleidung passend dazu): ${scene.trim()}")
         }
         if (aboutUser.isNotBlank()) {
             appendLine()
@@ -75,8 +80,8 @@ object PromptBuilder {
     // ---------- Rooms (Gruppenchat) ----------
 
     /** Anweisung für eine Figur im Gruppenchat: ihre Rolle plus wer sonst noch da ist. */
-    fun buildForRoom(c: Character, others: List<Character>, scenario: String, aboutUser: String, gameRules: String = ""): String = buildString {
-        append(build(c, aboutUser))
+    fun buildForRoom(c: Character, others: List<Character>, scenario: String, aboutUser: String, gameRules: String = "", scene: String = ""): String = buildString {
+        append(build(c, aboutUser, scene = scene))
         appendLine()
         appendLine()
         appendLine("Gruppenchat:")

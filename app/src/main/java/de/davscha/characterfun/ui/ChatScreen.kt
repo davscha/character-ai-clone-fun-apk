@@ -248,6 +248,7 @@ fun ChatScreen(vm: AppViewModel) {
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outline)
         vm.game?.let { GameBanner(vm, it) }
+        SceneBar(vm, c)
 
         Box(Modifier.weight(1f).fillMaxWidth()) {
             LazyColumn(
@@ -279,6 +280,18 @@ fun ChatScreen(vm: AppViewModel) {
                     }
                 }
                 itemsIndexed(vm.messages) { i, msg ->
+                    if (msg.note) {
+                        // Hinweis der Spielleitung (Ort/Kleidung gewechselt)
+                        Text(
+                            msg.text,
+                            fontSize = 14.sp,
+                            fontStyle = FontStyle.Italic,
+                            color = MaterialTheme.colorScheme.secondary,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.widthIn(max = 560.dp).padding(vertical = 2.dp),
+                        )
+                        return@itemsIndexed
+                    }
                     val isLast = i == vm.messages.lastIndex
                     val streaming = vm.isGenerating && isLast
                     // Neu würfeln geht bei der letzten Antwort, wenn davor eine Nachricht von dir steht
@@ -429,16 +442,31 @@ private fun MessageBubble(
                 Text(c.name, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(start = 4.dp, bottom = 2.dp))
             }
             if (msg.image.isNotEmpty()) {
-                AsyncImage(
-                    model = java.io.File(msg.image),
-                    contentDescription = "Geschicktes Bild",
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier
-                        .padding(bottom = 6.dp)
-                        .widthIn(max = 320.dp)
-                        .heightIn(max = 320.dp)
-                        .clip(RoundedCornerShape(12.dp)),
-                )
+                // Tippen = groß ansehen, lange drücken = löschen
+                var imgMenu by remember { mutableStateOf(false) }
+                var full by remember { mutableStateOf(false) }
+                if (full) FullImageDialog(msg.image) { full = false }
+                Box {
+                    AsyncImage(
+                        model = java.io.File(msg.image),
+                        contentDescription = "Bild",
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier
+                            .padding(bottom = 6.dp)
+                            .widthIn(max = if (msg.fromUser) 320.dp else 480.dp)
+                            .heightIn(max = if (msg.fromUser) 320.dp else 480.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .combinedClickable(onClick = { full = true }, onLongClick = { imgMenu = true }),
+                    )
+                    DropdownMenu(expanded = imgMenu, onDismissRequest = { imgMenu = false }) {
+                        DropdownMenuItem(
+                            text = { Text(tr("Löschen"), color = MaterialTheme.colorScheme.error) },
+                            leadingIcon = { Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error) },
+                            enabled = !busy,
+                            onClick = { imgMenu = false; onDelete() },
+                        )
+                    }
+                }
             }
             if (msg.text.isNotEmpty() || streaming || msg.image.isEmpty()) Box(
                 Modifier
@@ -970,4 +998,33 @@ private fun ComicDialog(vm: AppViewModel, c: Character, onClose: () -> Unit) {
             }
         },
     )
+}
+
+/** Leiste unter der Kopfzeile: Ort und Kleidung wählen, Bild von der Szene malen */
+@Composable
+private fun SceneBar(vm: AppViewModel, c: Character) {
+    var sceneDialog by remember { mutableStateOf(false) }
+    if (sceneDialog) {
+        SceneImageDialog(
+            vm, c, vm.chatLocationId, vm.chatOutfitId,
+            recent = { vm.recentChatText() },
+            onClose = { sceneDialog = false },
+        ) { path, loc, outfit ->
+            // Im Bild-Dialog anders gewählt? Dann gilt das ab jetzt auch im Chat
+            vm.setChatLocation(loc)
+            vm.setChatOutfit(outfit)
+            vm.addSceneImage(path)
+        }
+    }
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        LocationPicker(vm, vm.chatLocation, enabled = !vm.isGenerating) { vm.setChatLocation(it) }
+        OutfitPicker(vm, c, vm.clothing(vm.chatOutfitId), enabled = !vm.isGenerating) { vm.setChatOutfit(it) }
+        Spacer(Modifier.weight(1f))
+        TextButton(onClick = { sceneDialog = true }, enabled = vm.comfyReady && !vm.isGenerating) {
+            Text("📷 " + tr("Bild von der Szene"))
+        }
+    }
 }

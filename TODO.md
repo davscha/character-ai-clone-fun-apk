@@ -61,7 +61,7 @@ Grundeinstellungen: Positiv-Basis `masterpiece, highres, PandorasBoxStyle`, Nega
 
 - [x] **F1. ComfyUI-Anbindung + Fundus** – Verbindung/Test in den Einstellungen, Basis-Prompts, Workflow-Vorlage; eigenes Menü „Fundus“ mit gemeinsamen Listen für alle Figuren: Orte, Kleidung (je Name + Tags + Vorschaubild) und Stile (LoRA aus ComfyUI-Liste, Stärke; Trigger-Tag automatisch aus dem Dateinamen)
 - [x] **F2. Figurenblatt** – Aussehen (Tags + Vorschau), Schrank (Kleidung aus dem Fundus ankreuzen, Standard-Outfit), „Anprobieren“, Vorschau als Avatar übernehmen, eigener Startwert
-- [ ] **F3. Im Chat** – Ort und Kleidung wählen (Hinweis der Spielleitung bei Wechsel, Figur weiß Bescheid), „Bild von der Szene“ (Gemma schreibt die Szenen-Tags), auch in der Bildhilfe und im Room (eine Figur pro Bild)
+- [x] **F3. Im Chat** – Ort und Kleidung wählen (Hinweis der Spielleitung bei Wechsel, Figur weiß Bescheid), „Bild von der Szene“ (Gemma schreibt die Szenen-Tags), auch in der Bildhilfe und im Room (eine Figur pro Bild)
 - [ ] **F4. Bilderbuch** – Bilder aus dem Chat mit Erzähltext als PDF zum Blättern und Teilen
 
 ## Runde 2 – Praktisches (Etappe E)

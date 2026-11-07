@@ -203,6 +203,14 @@ class CharacterRepository(private val context: Context) {
         file.absolutePath
     }.getOrNull()
 
+    /** Ein von ComfyUI gemaltes Bild für den Chat speichern; gibt den absoluten Pfad zurück */
+    fun saveChatImageBytes(png: ByteArray): String {
+        val dir = File(chatsDir, "Bilder").apply { mkdirs() }
+        val f = File(dir, "szene-${System.currentTimeMillis()}.png")
+        f.writeBytes(png)
+        return f.absolutePath
+    }
+
     /** Alle gespeicherten Chats, neueste zuerst – für "Weiter chatten" */
     fun recentChats(): List<SavedChat> =
         chatsDir.listFiles { f -> f.name.endsWith(".json") }

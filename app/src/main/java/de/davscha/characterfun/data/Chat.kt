@@ -15,6 +15,8 @@ data class ChatMessage(
     val stats: String? = null,
     /** Absoluter Pfad eines mitgeschickten Bildes (oder leer) */
     val image: String = "",
+    /** Hinweis der Spielleitung (z. B. Ortswechsel) – mittig angezeigt, fürs Modell eine Regieanweisung */
+    val note: Boolean = false,
 ) {
     val text: String get() = variants.getOrElse(selected) { "" }
 
@@ -25,10 +27,12 @@ data class ChatMessage(
         .put("varianten", JSONArray(variants))
         .put("gewaehlt", selected)
         .put("bild", image)
+        .put("hinweis", note)
 
     companion object {
         fun user(text: String, image: String = "") = ChatMessage(fromUser = true, variants = listOf(text), image = image)
         fun bot(text: String) = ChatMessage(fromUser = false, variants = listOf(text))
+        fun note(text: String) = ChatMessage(fromUser = true, variants = listOf(text), note = true)
 
         fun fromJson(o: JSONObject): ChatMessage {
             val arr = o.optJSONArray("varianten") ?: JSONArray()
@@ -38,6 +42,7 @@ data class ChatMessage(
                 variants = variants,
                 selected = o.optInt("gewaehlt").coerceIn(0, variants.lastIndex),
                 image = o.optString("bild"),
+                note = o.optBoolean("hinweis"),
             )
         }
     }
@@ -56,6 +61,9 @@ data class SavedChat(
     val summarizedUpTo: Int = 0,
     /** Laufendes Spiel (null = keins) */
     val game: GameState? = null,
+    /** Gewählter Ort und Kleidung aus dem Fundus (leer = keiner / Standard-Outfit) */
+    val locationId: String = "",
+    val outfitId: String = "",
 ) {
     /** Letzte Nachricht für die "Weiter chatten"-Leiste */
     val preview: String get() = Mood.strip(messages.lastOrNull()?.text.orEmpty()).replace('\n', ' ')
@@ -68,6 +76,8 @@ data class SavedChat(
         .put("zusammenfassung", summary)
         .put("zusammengefasstBis", summarizedUpTo)
         .apply { game?.let { put("spiel", it.toJson()) } }
+        .put("ort", locationId)
+        .put("outfit", outfitId)
 
     companion object {
         fun fromJson(o: JSONObject): SavedChat {
@@ -81,6 +91,8 @@ data class SavedChat(
                 summary = o.optString("zusammenfassung"),
                 summarizedUpTo = o.optInt("zusammengefasstBis"),
                 game = GameState.fromJson(o.optJSONObject("spiel")),
+                locationId = o.optString("ort"),
+                outfitId = o.optString("outfit"),
             )
         }
     }

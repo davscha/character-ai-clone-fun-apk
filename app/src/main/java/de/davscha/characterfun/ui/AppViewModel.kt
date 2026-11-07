@@ -701,6 +701,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         summary = saved?.summary.orEmpty()
         summarizedUpTo = saved?.summarizedUpTo ?: 0
         game = saved?.game
+        chatLocationId = saved?.locationId.orEmpty()
+        chatOutfitId = saved?.outfitId.orEmpty()
         needsRebuild = true
         if (replace && screen is Screen.Chat) screen = Screen.Chat(c.id) else navigate(Screen.Chat(c.id))
         prepareConversation()
@@ -718,6 +720,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (memories.isNotEmpty()) saveChat()
         refreshRecentChats()
         game = null
+        chatLocationId = ""
+        chatOutfitId = ""
         needsRebuild = true
         prepareConversation()
     }
@@ -821,7 +825,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             summarize(c, history.subList(summarizedUpTo, end), end)
             if (summarizedUpTo == before) break // Zusammenfassen hat nicht geklappt – ohne weiter
         }
-        val prompt = PromptBuilder.build(c, aboutUser, memories.toList(), summary, game, moodEnabled)
+        val prompt = PromptBuilder.build(c, aboutUser, memories.toList(), summary, game, moodEnabled, scene = sceneText(c))
         withContext(Dispatchers.IO) {
             engine.startConversation(prompt, kept.map { it.fromUser to historyText(it) }, temperature)
         }
@@ -830,8 +834,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Im neu aufgebauten Verlauf stehen Bilder nur als Hinweis – die Antwort der Figur darauf trägt den Inhalt weiter. */
-    private fun historyText(m: ChatMessage) =
-        if (m.image.isNotEmpty()) "[schickt ein Bild] ${m.text}".trim() else m.text
+    private fun historyText(m: ChatMessage) = when {
+        m.note -> "(Spielleitung: ${m.text})"
+        m.image.isNotEmpty() && !m.fromUser -> "*(ein Bild der aktuellen Szene)* ${m.text}".trim()
+        m.image.isNotEmpty() -> "[schickt ein Bild] ${m.text}".trim()
+        else -> m.text
+    }
 
     /** Lässt Gemma die herausfallenden Nachrichten in die Zusammenfassung einarbeiten. */
     private suspend fun summarize(c: Character, newMessages: List<ChatMessage>, upTo: Int) {
@@ -1168,6 +1176,100 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         UserGender.value = g
         prefs.edit().putString("geschlecht", g.name).apply()
         needsRebuild = true
+    }
+
+    // ---------- Szene: Ort und Kleidung im Chat, Bild von der Szene ----------
+
+    /** Gewählter Ort im Einzelchat (Id aus dem Fundus, leer = keiner) */
+    var chatLocationId by mutableStateOf("")
+        private set
+    /** Gewählte Kleidung im Einzelchat (leer = Standard-Outfit der Figur) */
+    var chatOutfitId by mutableStateOf("")
+        private set
+
+    fun location(id: String) = fundus.locations.firstOrNull { it.id == id }
+    val chatLocation: FundusItem? get() = location(chatLocationId)
+    val chatOutfit: FundusItem? get() = clothing(chatOutfitId.ifEmpty { chatCharacter?.defaultOutfitId.orEmpty() })
+
+    /** Ort und Kleidung als Text für den Systemprompt */
+    private fun sceneText(c: Character, loc: FundusItem? = chatLocation, outfit: FundusItem? = chatOutfit): String = buildString {
+        loc?.let { append("Ort: ${it.name} (${it.tags}). ") }
+        outfit?.let { append("${c.name} trägt: ${it.name} (${it.tags}).") }
+    }.trim()
+
+    fun setChatLocation(id: String) {
+        if (id == chatLocationId || isGenerating) return
+        chatLocationId = id
+        val loc = location(id)
+        messages += ChatMessage.note(if (loc != null) tr("📍 Ihr seid jetzt hier: %s.", loc.name) else tr("📍 Ihr verlasst den Ort."))
+        needsRebuild = true
+        saveChat()
+    }
+
+    fun setChatOutfit(id: String) {
+        val c = chatCharacter ?: return
+        if (id == chatOutfitId || isGenerating) return
+        chatOutfitId = id
+        val o = chatOutfit
+        messages += ChatMessage.note(if (o != null) tr("👗 %s trägt jetzt: %s.", c.name, o.name) else tr("👗 %s zieht sich wieder um.", c.name))
+        needsRebuild = true
+        saveChat()
+    }
+
+    /** Das Ende des Einzelchats als Text (für die Szenen-Tags) */
+    fun recentChatText(): String {
+        val c = chatCharacter ?: return ""
+        return recentMessages(1500).filter { !it.note }.joinToString("\n") { m -> "${if (m.fromUser) "Nutzer" else c.name}: ${Mood.strip(m.text)}" }
+    }
+
+    /** Das Ende des Raum-Gesprächs als Text */
+    fun recentRoomText(): String = currentRoom?.messages?.takeLast(8)?.filter { it.text.isNotBlank() }?.joinToString("\n") { m ->
+        val who = when { m.fromUser -> "Nutzer"; m.isNarrator -> "Spielleitung"; else -> character(m.speakerId)?.name ?: "?" }
+        "$who: ${m.text.take(400)}"
+    }.orEmpty()
+
+    /** Gemma beschreibt den aktuellen Moment als Bild-Tags (Handlung, Ausdruck, Bildausschnitt) */
+    suspend fun sceneTags(c: Character, recent: String): String {
+        val answer = askHelper(
+            "Du schreibst Prompts für einen Anime-Bildgenerator im Danbooru-Tag-Stil. Du antwortest nur mit einer Komma-Liste englischer Tags, ohne Erklärung.",
+            "Gesprächsende mit der Figur \"${c.name}\":\n${recent.ifBlank { "(noch nichts)" }}\n\n" +
+                "Beschreibe den aktuellen Moment, so wie ihn eine Kamera von ${c.name} einfangen würde, mit 6 bis 12 englischen Tags: " +
+                "was ${c.name} gerade tut (Pose, Handlung), Gesichtsausdruck, Blickrichtung, Bildausschnitt (z. B. upper body, cowboy shot, full body). " +
+                "KEINE Tags zu Haaren, Augen, Körper, Kleidung oder Ort – die kommen von woanders. Nur die Tags.",
+            0.5,
+        )
+        return ImagePrompt.join(answer.lines().joinToString(",") { it.trim().trimStart('-', '*', ' ') }.replace("\"", ""))
+    }
+
+    /** Malt die Szene mit der Figur und gibt den Pfad des Bildes zurück */
+    suspend fun paintScene(c: Character, loc: FundusItem?, outfit: FundusItem?, tags: String, randomSeed: Boolean, onProgress: (Int) -> Unit): String {
+        val prompt = ImagePrompt.join("solo", c.genderTag, c.appearance, outfit?.tags, loc?.tags, tags)
+        val seed = c.imageSeed.takeIf { it > 0 && !randomSeed } ?: (0..999_999_999L).random()
+        val png = paint(prompt, styleFor(c), seed, "multiple views, reference sheet, character sheet", onProgress)
+        return withContext(Dispatchers.IO) { repo.saveChatImageBytes(png) }
+    }
+
+    /** Das gemalte Bild als Nachricht der Figur in den Einzelchat */
+    fun addSceneImage(path: String) {
+        messages += ChatMessage(fromUser = false, variants = listOf(""), image = path)
+        needsRebuild = true
+        saveChat()
+    }
+
+    // ---- Raum ----
+    val roomLocation: FundusItem? get() = currentRoom?.let { location(it.locationId) }
+
+    fun setRoomLocation(id: String) {
+        val r = currentRoom ?: return
+        if (roomBusy || id == r.locationId) return
+        val loc = location(id)
+        val note = if (loc != null) tr("📍 Ihr seid jetzt hier: %s.", loc.name) else tr("📍 Ihr verlasst den Ort.")
+        saveRoom(r.copy(locationId = id, messages = r.messages + RoomMessage(RoomGames.NARRATOR, note)))
+    }
+
+    fun addRoomImage(characterId: String, path: String) {
+        val r = currentRoom ?: return
+        saveRoom(r.copy(messages = r.messages + RoomMessage(characterId, "", path)))
     }
 
     /** Bild in den App-Ordner holen (verkleinert); null = hat nicht geklappt */
@@ -1672,7 +1774,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val turns = mutableListOf<Pair<Boolean, String>>()
         for (m in recent) {
             val mine = m.speakerId == c.id
-            val line = if (mine) m.text else "${nameOf(m)}: ${m.text}"
+            val text = if (m.image.isNotEmpty()) "*(zeigt ein Bild der Szene)* ${m.text}".trim() else m.text
+            val line = if (mine) text else "${nameOf(m)}: $text"
             val last = turns.lastOrNull()
             if (last != null && last.first == !mine) turns[turns.lastIndex] = last.first to (last.second + "\n" + line)
             else turns += !mine to line
@@ -1686,7 +1789,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
 
         val rules = room.game?.let { g -> RoomGames.rules(g, c) { id -> character(id)?.name ?: "?" } }.orEmpty()
-        val prompt = PromptBuilder.buildForRoom(c, others, room.scenario, aboutUser, rules)
+        val prompt = PromptBuilder.buildForRoom(c, others, room.scenario, aboutUser, rules, sceneText(c, location(room.locationId), clothing(c.defaultOutfitId)))
         withContext(Dispatchers.IO) { engine.startConversation(prompt, turns, temperature) }
         needsRebuild = true // ein offener Einzelchat muss danach neu aufgebaut werden
 
@@ -1749,6 +1852,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val chat = SavedChat(
             c.id, System.currentTimeMillis(), messages.toList(),
             memories = memories.toList(), summary = summary, summarizedUpTo = summarizedUpTo, game = game,
+            locationId = chatLocationId, outfitId = chatOutfitId,
         )
         if (chat.messages.none { it.fromUser } && chat.memories.isEmpty()) {
             // Nichts mehr übrig (z. B. alles gelöscht) – gespeicherten Chat entfernen
