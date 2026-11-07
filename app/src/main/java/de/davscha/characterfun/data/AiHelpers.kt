@@ -72,28 +72,35 @@ object AiHelpers {
 
     // ---------- Bild als Nachricht ----------
 
-    /** Arten der Bild-Nachricht: Anzeige-Schlüssel für tr() -> Anweisung */
+    /**
+     * Arten der Bild-Nachricht: Anzeige-Schlüssel für tr() -> Anweisung.
+     * Das Bild ist kein Foto, das man herzeigt, sondern der Moment im Rollenspiel.
+     */
     val imageModes = listOf(
-        "Erzählen" to "als lebendige kleine Erzählung mit einer Handlung zwischen *Sternchen* (z. B. *hält dir ein Foto hin*)",
-        "Beschreiben" to "als genaue, anschauliche Beschreibung des Bildes",
-        "Frage dazu" to "die das Bild kurz beschreibt und dann eine neugierige Frage dazu stellt",
+        "Was gerade passiert" to "Das Bild zeigt, was in diesem Moment passiert, wo du bist und was du siehst oder tust. Erzähle es als Handlung zwischen *Sternchen* in der Gegenwart, dazu ein, zwei Sätze wörtliche Rede an",
+        "Was passieren soll" to "Das Bild zeigt, was als Nächstes passieren soll – ein Ort, an den du willst, oder etwas, das du vorhast. Schlage es vor oder fang direkt damit an, mit Handlung zwischen *Sternchen* und wörtlicher Rede an",
+        "Was ich denke" to "Das Bild zeigt, woran du gerade denkst oder wovon du träumst. Erzähle deine Gedanken und Gefühle dazu, gern mit einer kleinen Geste zwischen *Sternchen*, gerichtet an",
     )
 
     const val IMAGE_SYSTEM =
-        "Du schreibst für den Nutzer einer Rollenspiel-Chat-App eine Nachricht, die ein Bild in Worte fasst. " +
+        "Du schreibst für den Nutzer einer Rollenspiel-Chat-App seine nächste Nachricht. Ein Bild zeigt dir den Moment, den er ausdrücken will. " +
             "Du antwortest nur mit der fertigen Nachricht, ohne Anführungszeichen und ohne Erklärung."
 
-    fun imagePrompt(targets: List<Character>, userGender: Gender, hint: String, mode: String): String = buildString {
+    fun imagePrompt(targets: List<Character>, userGender: Gender, hint: String, mode: String, context: String): String = buildString {
         val names = targets.joinToString(" und ") { it.name }
-        appendLine("Der Nutzer chattet mit $names und möchte dieses Bild zeigen.")
+        if (context.isNotBlank()) {
+            appendLine("So lief das Gespräch mit $names bisher (Ende):")
+            appendLine(context.trim())
+            appendLine()
+        }
         targets.filter { it.gender != Gender.UNKNOWN }.forEach { appendLine("${it.name} ist ${it.gender.prompt} – sprich ${it.name} grammatisch passend an.") }
         if (userGender != Gender.UNKNOWN) appendLine("Der Nutzer selbst ist ${userGender.prompt}. Alles in Ich-Form muss dazu passen.")
-        if (hint.isNotBlank()) appendLine("Hinweis des Nutzers zum Bild (hat Vorrang vor deiner Deutung): ${hint.trim()}")
+        if (hint.isNotBlank()) appendLine("Hinweis des Nutzers (hat Vorrang vor deiner Deutung des Bildes): ${hint.trim()}")
         appendLine()
-        appendLine("Schreibe in Ich-Form aus Sicht des Nutzers eine Nachricht an $names, $mode.")
-        appendLine("Beschreibe das Bild so anschaulich, dass man es sich ohne das Bild vorstellen kann: was zu sehen ist, Farben, Stimmung, Besonderheiten.")
-        appendLine("Personen auf dem Bild: Lege ihr Geschlecht oder Alter nur fest, wenn es eindeutig ist oder im Hinweis steht – sonst schreibe neutral (z. B. \"die Person\").")
-        appendLine("Die Person auf dem Bild ist nicht automatisch der Nutzer, außer der Hinweis sagt es.")
+        appendLine("Schreibe die nächste Nachricht des Nutzers in Ich-Form. $mode $names.")
+        appendLine("Ganz wichtig: Erwähne NIE, dass es ein Bild, Foto oder eine Aufnahme ist. Kein \"schau mal\", kein \"ich zeige dir\". Das Bild ist die Wirklichkeit im Rollenspiel – beschreibe es, als würdest du es gerade erleben.")
+        appendLine("Lass die Einzelheiten aus dem Bild lebendig einfließen (Ort, Licht, Farben, Stimmung) und knüpfe natürlich an das bisherige Gespräch an.")
+        appendLine("Personen auf dem Bild: Lege ihr Geschlecht oder Alter nur fest, wenn es eindeutig ist oder im Hinweis steht – sonst schreibe neutral. Eine Person auf dem Bild ist nicht automatisch der Nutzer, außer der Hinweis sagt es.")
         append("Höchstens 80 Wörter, auf ${I18n.lang.promptName}.")
     }
 }

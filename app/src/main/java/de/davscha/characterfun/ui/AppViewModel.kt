@@ -1137,7 +1137,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** Die KI schaut sich das Bild an und schreibt daraus deine Nachricht an [targets] */
     suspend fun describeImage(path: String, hint: String, mode: String, targets: List<Character>): String {
         check(engine.supportsImages || engineState !is EngineState.Ready) { tr("Das Modell kann keine Bilder ansehen.") }
-        val text = askHelper(AiHelpers.IMAGE_SYSTEM, AiHelpers.imagePrompt(targets, userGender, hint, mode), 0.8, path)
+        // Das Ende des Gesprächs, damit die Nachricht natürlich anschließt (Einzelchat oder Raum)
+        val context = if (screen is Screen.Room) {
+            currentRoom?.messages?.takeLast(6)?.joinToString("\n") { m ->
+                val who = when { m.fromUser -> "Nutzer"; m.isNarrator -> "Spielleitung"; else -> character(m.speakerId)?.name ?: "?" }
+                "$who: ${m.text.take(400)}"
+            }.orEmpty()
+        } else {
+            val name = chatCharacter?.name ?: "Figur"
+            recentMessages(1500).joinToString("\n") { m -> "${if (m.fromUser) "Nutzer" else name}: ${Mood.strip(m.text)}" }
+        }
+        val text = askHelper(AiHelpers.IMAGE_SYSTEM, AiHelpers.imagePrompt(targets, userGender, hint, mode, context), 0.8, path)
         return text.trim().trim('"', '„', '“')
     }
 

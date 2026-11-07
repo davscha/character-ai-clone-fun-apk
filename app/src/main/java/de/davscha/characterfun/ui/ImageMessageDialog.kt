@@ -100,7 +100,7 @@ fun ImageMessageDialog(
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
-                    tr("Die KI schaut sich dein Bild an und macht daraus eine Nachricht. So bleibt es im Gespräch, auch wenn die Figur das Bild später nicht mehr sieht."),
+                    tr("Die KI schaut sich dein Bild an und macht daraus deine nächste Nachricht – als würdest du den Moment gerade erleben."),
                     fontSize = 13.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -134,7 +134,7 @@ fun ImageMessageDialog(
                     value = hint,
                     onValueChange = { hint = it },
                     label = { Text(tr("Hinweis (optional)")) },
-                    placeholder = { Text(tr("z. B. Das ist mein Kater Felix / Das bin ich im Urlaub")) },
+                    placeholder = { Text(tr("z. B. Ich bin am Strand angekommen / Das ist mein Kater Felix")) },
                     modifier = Modifier.fillMaxWidth(),
                     maxLines = 3,
                 )
