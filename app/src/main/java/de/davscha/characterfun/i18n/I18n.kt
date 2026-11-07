@@ -298,6 +298,8 @@ private val TABLE: Map<String, Array<String>> = mapOf(
     "Was ist zu sehen? (Tags)" to arrayOf("What can be seen? (tags)", "¿Qué se ve? (etiquetas)", "Que voit-on ? (tags)"),
     "Gemma schlägt Tags vor" to arrayOf("Gemma suggests tags", "Gemma sugiere etiquetas", "Gemma propose des tags"),
     "Auf dem Bild ist %s." to arrayOf("%s is in the picture.", "En la imagen está %s.", "%s est sur l’image."),
+    "Start:" to arrayOf("Start:", "Inicio:", "Départ :"),
+    "Keine besondere Kleidung" to arrayOf("No particular outfit", "Sin ropa especial", "Pas de tenue particulière"),
     "Abbrechen" to arrayOf("Cancel", "Cancelar", "Annuler"),
     "Neues Gespräch?" to arrayOf("New chat?", "¿Nueva conversación?", "Nouvelle conversation ?"),
     "Das bisherige Gespräch mit %s wird gelöscht. Angeheftete Erinnerungen bleiben." to arrayOf("The current chat with %s will be deleted. Pinned memories stay.", "Se borrará la conversación con %s. Los recuerdos fijados se mantienen.", "La conversation avec %s sera supprimée. Les souvenirs épinglés restent."),

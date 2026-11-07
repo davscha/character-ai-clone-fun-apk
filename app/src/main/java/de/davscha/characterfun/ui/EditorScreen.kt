@@ -129,6 +129,16 @@ fun EditorScreen(vm: AppViewModel, characterId: String?) {
                 }
                 ProfileCheck(vm, c.copy(starters = starters.filter { it.isNotBlank() }))
 
+                // Womit ein neues Gespräch beginnt: Ort und Kleidung aus dem Fundus
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(tr("Start:"), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    LocationPicker(vm, vm.location(c.defaultLocationId)) { c = c.copy(defaultLocationId = it) }
+                    OutfitPicker(vm, c, vm.clothing(c.defaultOutfitId), noneLabel = tr("Keine besondere Kleidung")) { id ->
+                        // Das Start-Outfit kommt automatisch mit in den Schrank
+                        c = c.copy(defaultOutfitId = id, wardrobe = if (id.isBlank() || id in c.wardrobe) c.wardrobe else c.wardrobe + id)
+                    }
+                }
+
                 // Avatar
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Avatar(c, vm.repo.avatar(c), size = 96.dp)

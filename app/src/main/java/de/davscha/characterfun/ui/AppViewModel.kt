@@ -701,7 +701,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         summary = saved?.summary.orEmpty()
         summarizedUpTo = saved?.summarizedUpTo ?: 0
         game = saved?.game
-        chatLocationId = saved?.locationId.orEmpty()
+        // Neues Gespräch: Start-Ort aus dem Figurenblatt
+        chatLocationId = if (saved != null && saved.messages.isNotEmpty()) saved.locationId else c.defaultLocationId
         chatOutfitId = saved?.outfitId.orEmpty()
         needsRebuild = true
         if (replace && screen is Screen.Chat) screen = Screen.Chat(c.id) else navigate(Screen.Chat(c.id))
@@ -720,7 +721,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (memories.isNotEmpty()) saveChat()
         refreshRecentChats()
         game = null
-        chatLocationId = ""
+        chatLocationId = c.defaultLocationId
         chatOutfitId = ""
         needsRebuild = true
         prepareConversation()

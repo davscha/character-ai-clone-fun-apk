@@ -79,6 +79,8 @@ data class Character(
     val imageSeed: Long = 0,
     /** Eigener Stil (Id aus dem Fundus, leer = Standard-Stil) */
     val styleId: String = "",
+    /** Ort, an dem ein neues Gespräch beginnt (Id aus dem Fundus, leer = keiner) */
+    val defaultLocationId: String = "",
 ) {
     /** Geschlecht als Bild-Tag */
     val genderTag: String get() = when (gender) {
@@ -113,6 +115,7 @@ data class Character(
         .put("standardOutfit", defaultOutfitId)
         .put("bildStartwert", imageSeed)
         .put("stil", styleId)
+        .put("startOrt", defaultLocationId)
 
     companion object {
         fun fromJson(o: JSONObject) = Character(
@@ -141,6 +144,7 @@ data class Character(
             defaultOutfitId = o.optString("standardOutfit"),
             imageSeed = o.optLong("bildStartwert"),
             styleId = o.optString("stil"),
+            defaultLocationId = o.optString("startOrt"),
         )
     }
 }

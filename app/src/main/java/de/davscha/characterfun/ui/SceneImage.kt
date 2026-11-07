@@ -72,16 +72,16 @@ fun LocationPicker(vm: AppViewModel, current: FundusItem?, enabled: Boolean = tr
 
 /** Auswahl der Kleidung: erst der Schrank der Figur, mit „alle zeigen“ der ganze Fundus */
 @Composable
-fun OutfitPicker(vm: AppViewModel, c: Character, current: FundusItem?, enabled: Boolean = true, onPick: (String) -> Unit) {
+fun OutfitPicker(vm: AppViewModel, c: Character, current: FundusItem?, enabled: Boolean = true, noneLabel: String? = null, onPick: (String) -> Unit) {
     var open by remember { mutableStateOf(false) }
     var all by remember { mutableStateOf(false) }
     Box {
         TextButton(onClick = { open = true }, enabled = enabled) {
-            Text("👗 " + (current?.name ?: tr("Standard")), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text("👗 " + (current?.name ?: noneLabel ?: tr("Standard")), maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             DropdownMenuItem(
-                text = { Text(tr("Standard-Outfit") + (vm.clothing(c.defaultOutfitId)?.let { " (${it.name})" } ?: "")) },
+                text = { Text(noneLabel ?: (tr("Standard-Outfit") + (vm.clothing(c.defaultOutfitId)?.let { " (${it.name})" } ?: ""))) },
                 onClick = { open = false; onPick("") },
             )
             val list = if (all || c.wardrobe.isEmpty()) vm.fundus.clothing else c.wardrobe.mapNotNull { vm.clothing(it) }
