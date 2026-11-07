@@ -464,6 +464,23 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch(Dispatchers.IO) { repo.save(snapshot) }
     }
 
+    /** Figur als Datei exportieren. Gibt eine Meldung zurück. */
+    suspend fun exportCharacter(c: Character, uri: Uri): String = try {
+        withContext(Dispatchers.IO) { repo.exportCharacter(c, uri) }
+        "${c.name} exportiert"
+    } catch (e: Exception) {
+        "Export fehlgeschlagen: ${e.message}"
+    }
+
+    /** Figur aus einer Datei importieren. Gibt eine Meldung zurück. */
+    suspend fun importCharacter(uri: Uri): String = try {
+        val c = withContext(Dispatchers.IO) { repo.importCharacter(uri) }
+        saveCharacter(c)
+        "${c.name} importiert"
+    } catch (e: Exception) {
+        "Import fehlgeschlagen: ${e.message}"
+    }
+
     suspend fun importAvatar(uri: Uri, characterId: String): String? =
         withContext(Dispatchers.IO) { repo.importAvatar(uri, characterId) }
 

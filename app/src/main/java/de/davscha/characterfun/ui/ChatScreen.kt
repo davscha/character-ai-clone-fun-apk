@@ -1,6 +1,14 @@
 package de.davscha.characterfun.ui
 
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.platform.LocalContext
+import android.widget.Toast
+import android.speech.RecognizerIntent
+import android.content.Intent
+import android.content.ActivityNotFoundException
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -223,7 +231,7 @@ fun ChatScreen(vm: AppViewModel) {
             EngineOverlay(vm, Modifier.align(Alignment.Center))
         }
 
-        var input by rememberSaveable { mutableStateOf("") }
+        var input by rememberSaveable(stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue("")) }
 
         // Ideen von der KI: Tipp setzt den Vorschlag ins Eingabefeld
         if (vm.suggesting || vm.suggestions.isNotEmpty()) {
@@ -238,7 +246,7 @@ fun ChatScreen(vm: AppViewModel) {
                     LazyRow(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         items(vm.suggestions) { idea ->
                             SuggestionChip(
-                                onClick = { input = idea; vm.clearSuggestions() },
+                                onClick = { input = TextFieldValue(idea, TextRange(idea.length)); vm.clearSuggestions() },
                                 label = { Text(roleplayText(idea), maxLines = 2) },
                                 modifier = Modifier.widthIn(max = 320.dp),
                             )
@@ -446,7 +454,16 @@ private fun roleplayText(text: String): androidx.compose.ui.text.AnnotatedString
 }
 
 @Composable
-private fun InputBar(vm: AppViewModel, c: Character, text: String, onText: (String) -> Unit) {
+private fun InputBar(vm: AppViewModel, c: Character, text: TextFieldValue, onText: (TextFieldValue) -> Unit) {
+    // Spracheingabe über die Spracherkennung von Android – das Erkannte wird angehängt
+    val speech = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        val spoken = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
+        if (!spoken.isNullOrBlank()) {
+            val joined = (text.text.trimEnd() + " " + spoken).trim()
+            onText(TextFieldValue(joined, TextRange(joined.length)))
+        }
+    }
+    val context = LocalContext.current
     val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) vm.attachImage(uri)
     }
@@ -478,6 +495,39 @@ private fun InputBar(vm: AppViewModel, c: Character, text: String, onText: (Stri
             shape = RoundedCornerShape(24.dp),
         )
         Spacer(Modifier.width(6.dp))
+        // Erzählmodus: zwei Sternchen einsetzen, Cursor dazwischen (oder markierten Text einrahmen)
+        IconButton(
+            onClick = {
+                val sel = text.selection
+                val t = text.text
+                onText(
+                    if (sel.collapsed) {
+                        TextFieldValue(t.substring(0, sel.start) + "**" + t.substring(sel.start), TextRange(sel.start + 1))
+                    } else {
+                        val inner = t.substring(sel.min, sel.max)
+                        TextFieldValue(t.substring(0, sel.min) + "*" + inner + "*" + t.substring(sel.max), TextRange(sel.max + 2))
+                    }
+                )
+            },
+            enabled = vm.chatReady,
+            modifier = Modifier.size(52.dp),
+        ) { Text("*…*", fontStyle = FontStyle.Italic, fontWeight = FontWeight.Bold) }
+        // Spracheingabe
+        IconButton(
+            onClick = {
+                val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+                    .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                    .putExtra(RecognizerIntent.EXTRA_LANGUAGE, "de-DE")
+                    .putExtra(RecognizerIntent.EXTRA_PROMPT, "Sprich mit ${c.name} …")
+                try {
+                    speech.launch(intent)
+                } catch (e: ActivityNotFoundException) {
+                    Toast.makeText(context, "Keine Spracherkennung auf diesem Gerät gefunden", Toast.LENGTH_LONG).show()
+                }
+            },
+            enabled = vm.chatReady && !vm.isGenerating,
+            modifier = Modifier.size(52.dp),
+        ) { Icon(Icons.Default.Mic, "Spracheingabe") }
         // Bild anhängen – nur, wenn das Modell Bilder ansehen kann
         IconButton(
             onClick = { pickImage.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
@@ -497,8 +547,8 @@ private fun InputBar(vm: AppViewModel, c: Character, text: String, onText: (Stri
             }
         } else {
             FilledIconButton(
-                onClick = { vm.send(text); onText("") },
-                enabled = vm.chatReady && (text.isNotBlank() || vm.pendingImage != null),
+                onClick = { vm.send(text.text); onText(TextFieldValue("")) },
+                enabled = vm.chatReady && (text.text.isNotBlank() || vm.pendingImage != null),
                 modifier = Modifier.size(52.dp),
             ) { Icon(Icons.AutoMirrored.Filled.Send, "Senden") }
         }

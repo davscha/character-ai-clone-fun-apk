@@ -69,6 +69,34 @@ class CharacterRepository(private val context: Context) {
         name
     }.getOrNull()
 
+    // ---------- Figuren teilen: eine .json-Datei mit eingebettetem Bild ----------
+
+    /** Schreibt die Figur samt Avatar in die gewählte Datei. */
+    fun exportCharacter(c: Character, uri: Uri) {
+        val json = JSONObject()
+            .put("format", "characterfun-figur")
+            .put("version", 1)
+            .put("figur", c.toJson().apply { remove("id"); remove("builtIn"); remove("avatarFile") })
+        avatar(c)?.let { json.put("bild", android.util.Base64.encodeToString(it.readBytes(), android.util.Base64.NO_WRAP)) }
+        context.contentResolver.openOutputStream(uri, "wt")?.use { it.write(json.toString(2).toByteArray()) }
+            ?: error("Datei konnte nicht geschrieben werden")
+    }
+
+    /** Liest eine exportierte Figur ein – sie bekommt eine neue Id und gilt als eigene Figur. */
+    fun importCharacter(uri: Uri): Character {
+        val text = context.contentResolver.openInputStream(uri)?.use { it.readBytes().decodeToString() }
+            ?: error("Datei konnte nicht gelesen werden")
+        val json = JSONObject(text)
+        require(json.optString("format") == "characterfun-figur") { "Das ist keine Character-Fun-Figur." }
+        var c = Character.fromJson(json.getJSONObject("figur").put("id", "")).copy(builtIn = false)
+        json.optString("bild").takeIf { it.isNotEmpty() }?.let { b64 ->
+            val name = "${c.id}-${System.currentTimeMillis()}.jpg"
+            File(avatarDir, name).writeBytes(android.util.Base64.decode(b64, android.util.Base64.DEFAULT))
+            c = c.copy(avatarFile = name)
+        }
+        return c
+    }
+
     // ---------- Chats: eine Datei pro Figur in Chats/ ----------
 
     private val chatsDir: File get() = File(dataDir, "Chats").apply { mkdirs() }

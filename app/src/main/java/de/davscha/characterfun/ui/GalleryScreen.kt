@@ -1,6 +1,14 @@
 package de.davscha.characterfun.ui
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.FileOpen
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.platform.LocalContext
+import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -64,6 +72,8 @@ import de.davscha.characterfun.data.Character
 /** Startseite: alle Figuren als Karten, mit Kategorie-Filter und Suche. */
 @Composable
 fun GalleryScreen(vm: AppViewModel) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var query by rememberSaveable { mutableStateOf("") }
     // null = "Alle", "eigene" = selbst erstellte, sonst Name der Kategorie
     var filter by rememberSaveable { mutableStateOf<String?>(null) }
@@ -111,6 +121,14 @@ fun GalleryScreen(vm: AppViewModel) {
                     modifier = Modifier.widthIn(max = 360.dp),
                 )
                 Spacer(Modifier.width(12.dp))
+                val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+                    if (uri != null) scope.launch { Toast.makeText(context, vm.importCharacter(uri), Toast.LENGTH_LONG).show() }
+                }
+                TextButton(onClick = { importLauncher.launch(arrayOf("application/json", "application/octet-stream", "*/*")) }) {
+                    Icon(Icons.Default.FileOpen, null)
+                    Spacer(Modifier.width(6.dp))
+                    Text("Importieren")
+                }
                 TextButton(onClick = { vm.navigate(Screen.Models) }) {
                     Icon(Icons.Default.Settings, null)
                     Spacer(Modifier.width(6.dp))
@@ -188,6 +206,11 @@ private fun modelLine(vm: AppViewModel): String = when (val s = vm.engineState) 
 private fun CharacterCard(vm: AppViewModel, c: Character) {
     var menuOpen by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        if (uri != null) scope.launch { Toast.makeText(context, vm.exportCharacter(c, uri), Toast.LENGTH_SHORT).show() }
+    }
     if (confirmDelete) {
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
@@ -245,6 +268,14 @@ private fun CharacterCard(vm: AppViewModel, c: Character) {
                         text = { Text("Bearbeiten") },
                         leadingIcon = { Icon(Icons.Default.Edit, null) },
                         onClick = { menuOpen = false; vm.navigate(Screen.Editor(c.id)) },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Exportieren") },
+                        leadingIcon = { Icon(Icons.Default.Share, null) },
+                        onClick = {
+                            menuOpen = false
+                            exportLauncher.launch("${c.name.ifBlank { "Figur" }.replace(Regex("[^\\p{L}\\p{N} _-]"), "")}.figur.json")
+                        },
                     )
                     DropdownMenuItem(
                         text = { Text("Löschen", color = MaterialTheme.colorScheme.error) },

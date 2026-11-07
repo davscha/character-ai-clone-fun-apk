@@ -12,9 +12,9 @@ Stand: 6. November 2026. Abhaken mit `[x]`, sobald etwas fertig ist.
 ## Mittlerer Aufwand, macht richtig Spaß
 
 - [x] **5. Vorlesen** – Antworten per Android-Sprachausgabe (offline), eigene Stimmlage und Tempo pro Figur
-- [ ] **6. Spracheingabe** – Mikrofon-Knopf über die Android-Spracherkennung
+- [x] **6. Spracheingabe** – Mikrofon-Knopf über die Android-Spracherkennung
 - [x] **7. Bilder an die Figur schicken** – Gemma 4 E2B/E4B verstehen Bilder, die Figur kommentiert das Foto
-- [ ] **8. Figuren exportieren und importieren** – als Datei inkl. Bild, zum Teilen und Sichern
+- [x] **8. Figuren exportieren und importieren** – als Datei inkl. Bild, zum Teilen und Sichern
 
 ## Größere Brocken
 
