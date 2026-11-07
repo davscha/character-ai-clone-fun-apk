@@ -99,6 +99,44 @@ class CharacterRepository(private val context: Context) {
         return c
     }
 
+    // ---------- Fundus (Orte, Kleidung, Stile) und ComfyUI-Vorlage ----------
+
+    val fundusDir: File get() = File(dataDir, "Fundus").apply { mkdirs() }
+    private val fundusFile get() = File(dataDir, "fundus.json")
+    private val workflowFile get() = File(dataDir, "comfy_workflow.json")
+
+    fun loadFundus(): Fundus {
+        val f = fundusFile
+        if (!f.exists()) return Fundus.starter.also { saveFundus(it) }
+        return runCatching { Fundus.fromJson(JSONObject(f.readText())) }.getOrElse { Fundus.starter }
+    }
+
+    fun saveFundus(fundus: Fundus) {
+        val tmp = File(dataDir, "fundus.json.tmp")
+        tmp.writeText(fundus.toJson().toString(2))
+        tmp.renameTo(fundusFile)
+    }
+
+    fun fundusImage(name: String): File? = name.takeIf { it.isNotEmpty() }?.let { File(fundusDir, it) }?.takeIf { it.exists() }
+
+    /** Speichert ein Bild von ComfyUI im Fundus-Ordner und gibt den Dateinamen zurück */
+    fun saveFundusImage(prefix: String, png: ByteArray): String {
+        val name = "$prefix-${System.currentTimeMillis()}.png"
+        File(fundusDir, name).writeBytes(png)
+        return name
+    }
+
+    /** Eigener Workflow (API-Format) oder null = eingebaute Vorlage */
+    fun loadWorkflow(): String? = workflowFile.takeIf { it.exists() }?.readText()
+
+    fun saveWorkflow(json: String?) {
+        if (json == null) workflowFile.delete() else workflowFile.writeText(json)
+    }
+
+    fun readText(uri: Uri): String? = runCatching {
+        context.contentResolver.openInputStream(uri)?.use { it.bufferedReader().readText() }
+    }.getOrNull()
+
     // ---------- Rooms: eine Datei pro Raum in Rooms/ ----------
 
     private val roomsDir: File get() = File(dataDir, "Rooms").apply { mkdirs() }

@@ -20,6 +20,12 @@ import de.davscha.characterfun.data.ChatMessage
 import de.davscha.characterfun.data.SavedChat
 import de.davscha.characterfun.data.Room
 import de.davscha.characterfun.data.AiHelpers
+import de.davscha.characterfun.data.Fundus
+import de.davscha.characterfun.data.FundusItem
+import de.davscha.characterfun.data.FundusKind
+import de.davscha.characterfun.data.StyleItem
+import de.davscha.characterfun.data.ImagePrompt
+import de.davscha.characterfun.engine.ComfyClient
 import de.davscha.characterfun.data.Gender
 import de.davscha.characterfun.data.UserGender
 import de.davscha.characterfun.data.Mood
@@ -90,6 +96,7 @@ sealed interface Screen {
     data class Room(val roomId: String) : Screen
     /** roomId = null: neuer Raum */
     data class RoomEditor(val roomId: String?) : Screen
+    data object FundusPage : Screen
 }
 
 class AppViewModel(app: Application) : AndroidViewModel(app) {
@@ -312,6 +319,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         refreshRecentChats()
         rooms.clear()
         rooms.addAll(repo.loadRooms())
+        fundus = repo.loadFundus()
+        customWorkflow = repo.loadWorkflow() != null
     }
 
     /** Schon geladene Modelle aus dem internen Ordner übernehmen, statt sie neu herunterzuladen. */
@@ -1226,6 +1235,197 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         return ProfileGenerator.parse(answer.toString(), base)
     }
 
+    // ---------- Bilder mit ComfyUI (auf dem PC) ----------
+
+    var comfyHost by mutableStateOf(prefs.getString("comfy_host", null) ?: ollamaHost)
+        private set
+    var comfyPort by mutableStateOf(prefs.getInt("comfy_port", COMFY_DEFAULT_PORT))
+        private set
+    /** Ergebnis des letzten Verbindungstests (null = noch nicht getestet) */
+    var comfyStatus by mutableStateOf<String?>(null)
+        private set
+    var comfyOk by mutableStateOf(false)
+        private set
+    var comfyTesting by mutableStateOf(false)
+        private set
+    var basePositive by mutableStateOf(prefs.getString("bild_positiv", null) ?: DEFAULT_POSITIVE)
+        private set
+    var baseNegative by mutableStateOf(prefs.getString("bild_negativ", null) ?: DEFAULT_NEGATIVE)
+        private set
+    /** true = eigener Workflow importiert, sonst eingebaute Vorlage */
+    var customWorkflow by mutableStateOf(false)
+        private set
+    /** LoRAs, die ComfyUI kennt (nach dem Test) */
+    val loras = mutableStateListOf<String>()
+
+    var fundus by mutableStateOf(Fundus())
+        private set
+    /** Ids von Einträgen, deren Vorschau gerade gemalt wird */
+    val previewBusy = mutableStateMapOf<String, Boolean>()
+    /** Letzter Fehler beim Malen einer Vorschau (Id -> Text) */
+    val previewError = mutableStateMapOf<String, String>()
+
+    private val comfy get() = ComfyClient(comfyHost, comfyPort)
+    private val workflowTemplate get() = repo.loadWorkflow() ?: ComfyClient.DEFAULT_WORKFLOW
+    val comfyConfigured get() = comfyHost.isNotBlank()
+
+    fun changeComfyHost(h: String) {
+        comfyHost = h.trim()
+        prefs.edit().putString("comfy_host", comfyHost).apply()
+        comfyOk = false
+        comfyStatus = null
+    }
+
+    fun changeComfyPort(p: Int) {
+        comfyPort = p
+        prefs.edit().putInt("comfy_port", p).apply()
+        comfyOk = false
+        comfyStatus = null
+    }
+
+    fun changeBasePositive(t: String) {
+        basePositive = t
+        prefs.edit().putString("bild_positiv", t).apply()
+    }
+
+    fun changeBaseNegative(t: String) {
+        baseNegative = t
+        prefs.edit().putString("bild_negativ", t).apply()
+    }
+
+    fun testComfy() {
+        if (comfyHost.isBlank() || comfyTesting) return
+        comfyTesting = true
+        viewModelScope.launch {
+            try {
+                comfyStatus = comfy.test()
+                comfyOk = true
+                val list = runCatching { comfy.loras() }.getOrDefault(emptyList())
+                loras.clear()
+                loras.addAll(list)
+            } catch (e: Exception) {
+                comfyOk = false
+                comfyStatus = tr("Nicht erreichbar – läuft ComfyUI mit --listen? (%s)", e.message ?: e.javaClass.simpleName)
+            } finally {
+                comfyTesting = false
+            }
+        }
+    }
+
+    /** Eigenen Workflow laden – muss im API-Format exportiert sein */
+    suspend fun importWorkflow(uri: android.net.Uri): String = withContext(Dispatchers.IO) {
+        val text = repo.readText(uri) ?: return@withContext tr("Datei konnte nicht gelesen werden")
+        val o = runCatching { org.json.JSONObject(text) }.getOrNull() ?: return@withContext tr("Das ist keine JSON-Datei.")
+        if (o.has("nodes")) return@withContext tr("Bitte in ComfyUI mit „Export (API)“ speichern – dieser Workflow ist im normalen Format.")
+        val ok = runCatching { ComfyClient.prepare(org.json.JSONObject(text), "", "", 1, null, 1f, null, null) }.isSuccess
+        if (!ok) return@withContext tr("Im Workflow fehlt ein KSampler.")
+        repo.saveWorkflow(text)
+        customWorkflow = true
+        tr("Workflow übernommen.")
+    }
+
+    fun resetWorkflow() {
+        repo.saveWorkflow(null)
+        customWorkflow = false
+    }
+
+    /** Malt ein Bild: Basis + Trigger des Stils + [tags]. Gibt die PNG-Bytes zurück. */
+    suspend fun paint(tags: String, style: StyleItem? = null, seed: Long = (0..999_999_999L).random(), onProgress: (Int) -> Unit = {}): ByteArray {
+        require(comfyConfigured) { tr("ComfyUI ist noch nicht eingerichtet (Einstellungen → Bilder).") }
+        val st = style ?: fundus.defaultStyle
+        val positive = ImagePrompt.join(basePositive, st?.trigger, tags)
+        return comfy.generate(workflowTemplate, positive, baseNegative, seed, st?.lora, st?.strength ?: 1f, onProgress = onProgress)
+    }
+
+    fun fundusImage(name: String) = repo.fundusImage(name)
+
+    private fun updateFundus(f: Fundus) {
+        fundus = f
+        viewModelScope.launch(Dispatchers.IO) { repo.saveFundus(f) }
+    }
+
+    private fun Fundus.list(kind: FundusKind) = if (kind == FundusKind.LOCATION) locations else clothing
+    private fun Fundus.with(kind: FundusKind, items: List<FundusItem>) =
+        if (kind == FundusKind.LOCATION) copy(locations = items) else copy(clothing = items)
+
+    fun saveFundusItem(kind: FundusKind, item: FundusItem) {
+        val list = fundus.list(kind).toMutableList()
+        val i = list.indexOfFirst { it.id == item.id }
+        if (i >= 0) list[i] = item else list.add(item)
+        updateFundus(fundus.with(kind, list))
+    }
+
+    fun deleteFundusItem(kind: FundusKind, id: String) {
+        updateFundus(fundus.with(kind, fundus.list(kind).filter { it.id != id }))
+    }
+
+    fun saveStyle(s: StyleItem, makeDefault: Boolean = false) {
+        val list = fundus.styles.toMutableList()
+        val i = list.indexOfFirst { it.id == s.id }
+        if (i >= 0) list[i] = s else list.add(s)
+        updateFundus(fundus.copy(styles = list, defaultStyleId = if (makeDefault || fundus.defaultStyleId.isBlank()) s.id else fundus.defaultStyleId))
+    }
+
+    fun deleteStyle(id: String) {
+        val list = fundus.styles.filter { it.id != id }
+        updateFundus(fundus.copy(styles = list, defaultStyleId = if (fundus.defaultStyleId == id) list.firstOrNull()?.id.orEmpty() else fundus.defaultStyleId))
+    }
+
+    /** Vorschau für einen Ort oder ein Kleidungsstück malen (speichert den Eintrag vorher) */
+    fun paintPreview(kind: FundusKind, item: FundusItem) {
+        if (previewBusy[item.id] == true) return
+        saveFundusItem(kind, item)
+        previewBusy[item.id] = true
+        previewError.remove(item.id)
+        viewModelScope.launch {
+            try {
+                val tags = if (kind == FundusKind.LOCATION) ImagePrompt.locationPreview(item) else ImagePrompt.clothingPreview(item)
+                val png = paint(tags)
+                val name = withContext(Dispatchers.IO) { repo.saveFundusImage(if (kind == FundusKind.LOCATION) "ort" else "kleidung", png) }
+                val current = fundus.list(kind).firstOrNull { it.id == item.id } ?: item
+                saveFundusItem(kind, current.copy(preview = name))
+            } catch (e: Exception) {
+                previewError[item.id] = e.message ?: tr("Fehler")
+            } finally {
+                previewBusy.remove(item.id)
+            }
+        }
+    }
+
+    fun paintStylePreview(style: StyleItem) {
+        if (previewBusy[style.id] == true) return
+        saveStyle(style)
+        previewBusy[style.id] = true
+        previewError.remove(style.id)
+        viewModelScope.launch {
+            try {
+                val png = paint(ImagePrompt.STYLE_PREVIEW, style, seed = 7)
+                val name = withContext(Dispatchers.IO) { repo.saveFundusImage("stil", png) }
+                val current = fundus.styles.firstOrNull { it.id == style.id } ?: style
+                saveStyle(current.copy(preview = name))
+            } catch (e: Exception) {
+                previewError[style.id] = e.message ?: tr("Fehler")
+            } finally {
+                previewBusy.remove(style.id)
+            }
+        }
+    }
+
+    /** Gemma macht aus einer Beschreibung (z. B. "gemütliches Café am Abend") Bild-Tags */
+    suspend fun tagsFromDescription(description: String, kind: FundusKind?): String {
+        val what = when (kind) {
+            FundusKind.LOCATION -> "einen Ort (Hintergrund, keine Personen)"
+            FundusKind.CLOTHING -> "ein Outfit (nur Kleidung und Accessoires, keine Körpermerkmale)"
+            null -> "das Aussehen einer Figur (Haare, Augen, Körper, Merkmale – keine Kleidung)"
+        }
+        val answer = askHelper(
+            "Du schreibst Prompts für einen Anime-Bildgenerator im Danbooru-Tag-Stil. Du antwortest nur mit einer Komma-Liste englischer Tags, ohne Erklärung.",
+            "Beschreibung: ${description.trim()}\n\nSchreibe 6 bis 15 englische Danbooru-Tags für $what. Nur die Tags, durch Kommas getrennt.",
+            0.4,
+        )
+        return ImagePrompt.join(answer.lines().joinToString(",") { it.trim().trimStart('-', '*', ' ') }.replace("\"", ""))
+    }
+
     // ---------- Rooms (Gruppenchat) ----------
 
     var currentRoom by mutableStateOf<Room?>(null)
@@ -1545,6 +1745,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
         /** Wie viel Verlauf das Modell mitbekommt – grob 2500 Tokens, passt in 4096 mit Platz für Antworten */
         const val HISTORY_CHARS = 8000
+        const val COMFY_DEFAULT_PORT = 8080
+        const val DEFAULT_POSITIVE = "masterpiece, highres"
+        const val DEFAULT_NEGATIVE = "lowres, photorealistic, photo background, multiple views"
     }
 
     override fun onCleared() {

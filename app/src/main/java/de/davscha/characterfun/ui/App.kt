@@ -33,6 +33,7 @@ fun App(vm: AppViewModel) {
             } else ChatScreen(vm)
             is Screen.Editor -> EditorScreen(vm, s.characterId)
             is Screen.Room -> RoomScreen(vm)
+            Screen.FundusPage -> FundusScreen(vm)
             is Screen.RoomEditor -> RoomEditorScreen(vm, s.roomId)
         }
     }

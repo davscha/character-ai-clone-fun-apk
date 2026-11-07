@@ -161,6 +161,11 @@ fun GalleryScreen(vm: AppViewModel) {
                     Spacer(Modifier.width(6.dp))
                     Text(tr("Importieren"))
                 }
+                TextButton(onClick = { vm.navigate(Screen.FundusPage) }) {
+                    Text("🎭")
+                    Spacer(Modifier.width(6.dp))
+                    Text(tr("Fundus"))
+                }
                 TextButton(onClick = { vm.navigate(Screen.Models) }) {
                     Icon(Icons.Default.Settings, null)
                     Spacer(Modifier.width(6.dp))

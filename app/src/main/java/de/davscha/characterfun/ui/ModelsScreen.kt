@@ -1,5 +1,7 @@
 package de.davscha.characterfun.ui
 
+import kotlinx.coroutines.launch
+
 import de.davscha.characterfun.i18n.AppLanguage
 import de.davscha.characterfun.i18n.I18n
 import de.davscha.characterfun.i18n.tr
@@ -151,6 +153,9 @@ fun ModelsScreen(vm: AppViewModel) {
                     vm.allModels.filter { it.url.isEmpty() }.forEach { model -> ModelCard(vm, model) }
                     ImportBox(vm)
                 }
+
+                SectionTitle(tr("Bilder (ComfyUI auf dem PC)"))
+                ComfySettings(vm)
 
                 SectionTitle(tr("Kreativität"))
                 Text(
@@ -472,3 +477,81 @@ private fun EngineStatus(vm: AppViewModel) {
     }
 }
 
+
+/** ComfyUI: Adresse, Test, Basis-Prompts, Workflow-Vorlage */
+@Composable
+private fun ComfySettings(vm: AppViewModel) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val importLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) scope.launch {
+            android.widget.Toast.makeText(context, vm.importWorkflow(uri), android.widget.Toast.LENGTH_LONG).show()
+        }
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        OutlinedTextField(
+            value = vm.comfyHost,
+            onValueChange = { vm.changeComfyHost(it) },
+            label = { Text(tr("IP-Adresse")) },
+            placeholder = { Text("192.168.178.41") },
+            singleLine = true,
+            modifier = Modifier.weight(1f),
+        )
+        OutlinedTextField(
+            value = vm.comfyPort.toString(),
+            onValueChange = { v -> v.filter { it.isDigit() }.take(5).toIntOrNull()?.let { vm.changeComfyPort(it) } },
+            label = { Text(tr("Port")) },
+            singleLine = true,
+            modifier = Modifier.width(110.dp),
+        )
+    }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        androidx.compose.material3.OutlinedButton(onClick = { vm.testComfy() }, enabled = vm.comfyConfigured && !vm.comfyTesting) {
+            Text(if (vm.comfyTesting) tr("Teste …") else tr("Verbindung testen"))
+        }
+        Spacer(Modifier.width(12.dp))
+        vm.comfyStatus?.let {
+            Text(
+                if (vm.comfyOk) "✓ $it" + (if (vm.loras.isNotEmpty()) " · " + tr("%s LoRAs", vm.loras.size) else "") else it,
+                fontSize = 13.sp,
+                color = if (vm.comfyOk) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.error,
+                modifier = Modifier.weight(1f),
+            )
+        }
+    }
+    Text(
+        tr("ComfyUI muss mit --listen gestartet sein, und die Windows-Firewall muss den Port durchlassen (wie bei Ollama)."),
+        fontSize = 12.sp,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    OutlinedTextField(
+        value = vm.basePositive,
+        onValueChange = { vm.changeBasePositive(it) },
+        label = { Text(tr("Basis positiv (steht immer vorne)")) },
+        minLines = 2,
+        modifier = Modifier.fillMaxWidth(),
+    )
+    OutlinedTextField(
+        value = vm.baseNegative,
+        onValueChange = { vm.changeBaseNegative(it) },
+        label = { Text(tr("Basis negativ")) },
+        minLines = 2,
+        modifier = Modifier.fillMaxWidth(),
+    )
+    Text(
+        tr("Dahinter setzt die App automatisch das Trigger-Tag des Stils (z. B. PandorasBoxStyle) und die Bausteine aus dem Fundus."),
+        fontSize = 12.sp,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            if (vm.customWorkflow) tr("Workflow: eigener (importiert)") else tr("Workflow: eingebaute Vorlage (SDXL, 12 Schritte, 1024×1024)"),
+            fontSize = 13.sp,
+            modifier = Modifier.weight(1f),
+        )
+        TextButton(onClick = { importLauncher.launch(arrayOf("application/json", "*/*")) }) { Text(tr("Importieren")) }
+        if (vm.customWorkflow) TextButton(onClick = { vm.resetWorkflow() }) { Text(tr("Zurücksetzen")) }
+    }
+}
