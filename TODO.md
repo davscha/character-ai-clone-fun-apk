@@ -51,6 +51,10 @@ Stand: 7. November 2026. Abhaken mit `[x]`, sobald etwas fertig ist.
 - [x] **27. Brief schreiben lassen** – Geburtstagsbrief, Weihnachtsgedicht usw.
 - [x] **28. Chat als Comic-Bild exportieren** – hübscher Screenshot zum Teilen
 
+## Extra
+
+- [x] **33. Bild als Nachricht** – die KI schaut sich ein Bild an und schreibt daraus deine Nachricht (auch im Room); Geschlecht für dich und jede Figur, damit Anrede und Ich-Form stimmen
+
 ## Runde 2 – Praktisches (Etappe E)
 
 - [ ] **29. Suche in alten Chats**

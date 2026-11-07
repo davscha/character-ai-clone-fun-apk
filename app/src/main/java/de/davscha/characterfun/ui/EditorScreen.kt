@@ -157,6 +157,13 @@ fun EditorScreen(vm: AppViewModel, characterId: String?) {
 
                 Field(tr("Name"), c.name, tr("z. B. Kapitän Kraken")) { c = c.copy(name = it) }
 
+                Text(tr("Geschlecht"), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    de.davscha.characterfun.data.Gender.entries.forEach { g ->
+                        FilterChip(selected = c.gender == g, onClick = { c = c.copy(gender = g) }, label = { Text(tr(g.label)) })
+                    }
+                }
+
                 Text(tr("Kategorie"), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Category.entries.forEach { cat ->

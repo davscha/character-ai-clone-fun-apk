@@ -611,9 +611,15 @@ private fun InputBar(vm: AppViewModel, c: Character, text: TextFieldValue, onTex
             enabled = vm.chatReady && !vm.isGenerating,
             modifier = Modifier.size(52.dp),
         ) { Icon(Icons.Default.Mic, "Spracheingabe") }
-        // Bild anhängen – nur, wenn das Modell Bilder ansehen kann
+        // Bild als Nachricht – nur, wenn das Modell Bilder ansehen kann
+        var imageDialog by remember { mutableStateOf(false) }
+        if (imageDialog) ImageMessageDialog(vm, listOf(c), allowAttach = true, onClose = { imageDialog = false }) { msg, img ->
+            val joined = (text.text.trimEnd() + " " + msg).trim()
+            onText(TextFieldValue(joined, TextRange(joined.length)))
+            if (img != null) vm.usePendingImage(img)
+        }
         IconButton(
-            onClick = { pickImage.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+            onClick = { imageDialog = true },
             enabled = vm.imagesSupported && !vm.isGenerating,
             modifier = Modifier.size(52.dp),
         ) { Icon(Icons.Default.AddPhotoAlternate, "Bild schicken") }

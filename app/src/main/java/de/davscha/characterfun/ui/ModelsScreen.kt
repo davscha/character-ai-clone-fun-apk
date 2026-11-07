@@ -112,6 +112,12 @@ fun ModelsScreen(vm: AppViewModel) {
                     minLines = 2,
                     modifier = Modifier.fillMaxWidth(),
                 )
+                Text(tr("Dein Geschlecht (für die richtige Anrede und Ich-Form)"), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    de.davscha.characterfun.data.Gender.entries.forEach { g ->
+                        FilterChip(selected = vm.userGender == g, onClick = { vm.changeUserGender(g) }, label = { Text(tr(g.label)) })
+                    }
+                }
 
                 SectionTitle(tr("KI-Quelle"))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

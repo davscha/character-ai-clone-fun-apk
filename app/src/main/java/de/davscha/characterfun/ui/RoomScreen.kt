@@ -37,6 +37,7 @@ import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SportsEsports
@@ -324,6 +325,20 @@ private fun RoomInputBar(vm: AppViewModel) {
             enabled = !vm.roomBusy,
             modifier = Modifier.size(52.dp),
         ) { Icon(Icons.Default.Mic, tr("Spracheingabe")) }
+        // Bild als Nachricht: im Raum geht nur der Text, den die KI aus dem Bild macht
+        var imageDialog by remember { mutableStateOf(false) }
+        if (imageDialog) {
+            val members = vm.currentRoom?.let { vm.roomMembers(it) }.orEmpty()
+            ImageMessageDialog(vm, members, allowAttach = false, onClose = { imageDialog = false }) { msg, _ ->
+                val joined = (text.text.trimEnd() + " " + msg).trim()
+                text = TextFieldValue(joined, TextRange(joined.length))
+            }
+        }
+        IconButton(
+            onClick = { imageDialog = true },
+            enabled = vm.imagesSupported && !vm.roomBusy,
+            modifier = Modifier.size(52.dp),
+        ) { Icon(Icons.Default.AddPhotoAlternate, tr("Bild als Nachricht")) }
         Spacer(Modifier.width(6.dp))
         if (vm.roomBusy) {
             if (vm.roomSpeakerId == null) CircularProgressIndicator(Modifier.size(24.dp).padding(end = 8.dp), strokeWidth = 2.dp)

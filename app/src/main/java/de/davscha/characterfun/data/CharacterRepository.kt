@@ -38,6 +38,8 @@ class CharacterRepository(private val context: Context) {
         return runCatching {
             val arr = JSONObject(f.readText()).getJSONArray("figuren")
             List(arr.length()) { Character.fromJson(arr.getJSONObject(it)) }
+                // Beispiel-Figuren aus älteren Versionen bekommen ihr Geschlecht nachgetragen
+                .map { c -> if (c.builtIn && c.gender == Gender.UNKNOWN) c.copy(gender = SampleCharacters.all.firstOrNull { it.id == c.id }?.gender ?: Gender.UNKNOWN) else c }
         }.getOrElse { SampleCharacters.all }
     }
 

@@ -20,6 +20,8 @@ import de.davscha.characterfun.data.ChatMessage
 import de.davscha.characterfun.data.SavedChat
 import de.davscha.characterfun.data.Room
 import de.davscha.characterfun.data.AiHelpers
+import de.davscha.characterfun.data.Gender
+import de.davscha.characterfun.data.UserGender
 import de.davscha.characterfun.data.Mood
 import de.davscha.characterfun.data.RandomCharacter
 import de.davscha.characterfun.data.Writings
@@ -579,6 +581,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     var pendingImage by mutableStateOf<String?>(null)
         private set
 
+    /** Ein schon geholtes Bild mit der nächsten Nachricht mitschicken */
+    fun usePendingImage(path: String) {
+        pendingImage = path
+    }
+
     fun attachImage(uri: android.net.Uri) {
         viewModelScope.launch {
             pendingImage = withContext(Dispatchers.IO) { repo.importChatImage(uri) }
@@ -1076,7 +1083,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Eine einzelne Frage ans Modell, außerhalb des Chats */
-    private suspend fun askHelper(system: String, prompt: String, temp: Double = 0.7): String {
+    private suspend fun askHelper(system: String, prompt: String, temp: Double = 0.7, imagePath: String? = null): String {
         check(!isGenerating && !roomBusy && !suggesting && !helperBusy) { tr("Es läuft gerade noch eine Antwort.") }
         helperBusy = true
         try {
@@ -1084,7 +1091,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             withContext(Dispatchers.IO) { engine.startConversation(system, emptyList(), temp) }
             needsRebuild = true // der Chat wird vor der nächsten Nachricht neu aufgebaut
             val sb = StringBuilder()
-            engine.send(prompt).collect { sb.append(it) }
+            engine.send(prompt, imagePath).collect { sb.append(it) }
             return sb.toString().trim()
         } catch (e: kotlinx.coroutines.CancellationException) {
             engine.stop()
@@ -1111,6 +1118,27 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val last = messages.lastOrNull { !it.fromUser }?.text
         return askHelper(AiHelpers.STYLE_SYSTEM, AiHelpers.stylePrompt(text, style, c.name, last), 0.9)
             .trim().trim('"', '„', '“').ifBlank { text }
+    }
+
+    /** Dein Geschlecht – für richtige Ich-Form und Anrede */
+    var userGender by mutableStateOf(Gender.of(prefs.getString("geschlecht", null)).also { UserGender.value = it })
+        private set
+
+    fun changeUserGender(g: Gender) {
+        userGender = g
+        UserGender.value = g
+        prefs.edit().putString("geschlecht", g.name).apply()
+        needsRebuild = true
+    }
+
+    /** Bild in den App-Ordner holen (verkleinert); null = hat nicht geklappt */
+    suspend fun importImage(uri: android.net.Uri): String? = withContext(Dispatchers.IO) { repo.importChatImage(uri) }
+
+    /** Die KI schaut sich das Bild an und schreibt daraus deine Nachricht an [targets] */
+    suspend fun describeImage(path: String, hint: String, mode: String, targets: List<Character>): String {
+        check(engine.supportsImages || engineState !is EngineState.Ready) { tr("Das Modell kann keine Bilder ansehen.") }
+        val text = askHelper(AiHelpers.IMAGE_SYSTEM, AiHelpers.imagePrompt(targets, userGender, hint, mode), 0.8, path)
+        return text.trim().trim('"', '„', '“')
     }
 
     /** Steckbrief-Check im Editor */

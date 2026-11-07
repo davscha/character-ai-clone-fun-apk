@@ -22,6 +22,18 @@ enum class ReplyLength(val label: String, val rule: String) {
     LANG("Lang", "Antworte ausführlich mit fünf bis acht Sätzen und beschreibe dabei auch die Szene."),
 }
 
+/** Geschlecht – wichtig für die richtige Anrede und Ich-Form im Deutschen. [label] ist Schlüssel für tr(). */
+enum class Gender(val label: String, val prompt: String) {
+    UNKNOWN("keine Angabe", ""),
+    MALE("männlich", "männlich"),
+    FEMALE("weiblich", "weiblich"),
+    DIVERSE("divers", "divers (neutrale Formen verwenden)");
+
+    companion object {
+        fun of(name: String?) = entries.firstOrNull { it.name == name } ?: UNKNOWN
+    }
+}
+
 /** Eine Figur – alle Felder aus dem character.ai-Editor, die für die App Sinn ergeben. */
 data class Character(
     val id: String = UUID.randomUUID().toString(),
@@ -53,6 +65,7 @@ data class Character(
     val voiceRate: Float = 1.0f,
     /** Name der Android-Stimme (leer = Standardstimme für Deutsch) */
     val voiceName: String = "",
+    val gender: Gender = Gender.UNKNOWN,
 ) {
     fun toJson(): JSONObject = JSONObject()
         .put("id", id)
@@ -72,6 +85,7 @@ data class Character(
         .put("voicePitch", voicePitch.toDouble())
         .put("voiceRate", voiceRate.toDouble())
         .put("voiceName", voiceName)
+        .put("geschlecht", gender.name)
 
     companion object {
         fun fromJson(o: JSONObject) = Character(
@@ -93,6 +107,7 @@ data class Character(
             voicePitch = o.optDouble("voicePitch", 1.0).toFloat(),
             voiceRate = o.optDouble("voiceRate", 1.0).toFloat(),
             voiceName = o.optString("voiceName"),
+            gender = Gender.of(o.optString("geschlecht")),
         )
     }
 }

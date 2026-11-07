@@ -69,4 +69,31 @@ object AiHelpers {
         appendLine("Erzähle dieses Gespräch als kurze Geschichte in der dritten Person, auf ${I18n.lang.promptName}.")
         append("Erste Zeile: ein passender Titel. Danach höchstens vier Absätze. Nenne den Nutzer bei seinem Namen, falls bekannt, sonst \"der Besucher\". Keine Aufzählungen.")
     }
+
+    // ---------- Bild als Nachricht ----------
+
+    /** Arten der Bild-Nachricht: Anzeige-Schlüssel für tr() -> Anweisung */
+    val imageModes = listOf(
+        "Erzählen" to "als lebendige kleine Erzählung mit einer Handlung zwischen *Sternchen* (z. B. *hält dir ein Foto hin*)",
+        "Beschreiben" to "als genaue, anschauliche Beschreibung des Bildes",
+        "Frage dazu" to "die das Bild kurz beschreibt und dann eine neugierige Frage dazu stellt",
+    )
+
+    const val IMAGE_SYSTEM =
+        "Du schreibst für den Nutzer einer Rollenspiel-Chat-App eine Nachricht, die ein Bild in Worte fasst. " +
+            "Du antwortest nur mit der fertigen Nachricht, ohne Anführungszeichen und ohne Erklärung."
+
+    fun imagePrompt(targets: List<Character>, userGender: Gender, hint: String, mode: String): String = buildString {
+        val names = targets.joinToString(" und ") { it.name }
+        appendLine("Der Nutzer chattet mit $names und möchte dieses Bild zeigen.")
+        targets.filter { it.gender != Gender.UNKNOWN }.forEach { appendLine("${it.name} ist ${it.gender.prompt} – sprich ${it.name} grammatisch passend an.") }
+        if (userGender != Gender.UNKNOWN) appendLine("Der Nutzer selbst ist ${userGender.prompt}. Alles in Ich-Form muss dazu passen.")
+        if (hint.isNotBlank()) appendLine("Hinweis des Nutzers zum Bild (hat Vorrang vor deiner Deutung): ${hint.trim()}")
+        appendLine()
+        appendLine("Schreibe in Ich-Form aus Sicht des Nutzers eine Nachricht an $names, $mode.")
+        appendLine("Beschreibe das Bild so anschaulich, dass man es sich ohne das Bild vorstellen kann: was zu sehen ist, Farben, Stimmung, Besonderheiten.")
+        appendLine("Personen auf dem Bild: Lege ihr Geschlecht oder Alter nur fest, wenn es eindeutig ist oder im Hinweis steht – sonst schreibe neutral (z. B. \"die Person\").")
+        appendLine("Die Person auf dem Bild ist nicht automatisch der Nutzer, außer der Hinweis sagt es.")
+        append("Höchstens 80 Wörter, auf ${I18n.lang.promptName}.")
+    }
 }

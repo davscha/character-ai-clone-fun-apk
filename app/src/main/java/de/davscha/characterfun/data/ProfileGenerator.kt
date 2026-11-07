@@ -21,6 +21,7 @@ object ProfileGenerator {
         {
           "name": "Name der Figur",
           "emoji": "ein einzelnes passendes Emoji",
+          "geschlecht": "männlich, weiblich oder divers",
           "kategorie": "genau eins von: Abenteuer, Lernen, Helfer, Spiele, Geschichten, Sprachen, Sonstiges",
           "kurzbeschreibung": "ein Satz für die Vorschau-Karte, höchstens 15 Wörter",
           "begruessung": "der erste Satz der Figur im Chat, in ihrem typischen Tonfall",
@@ -59,6 +60,12 @@ object ProfileGenerator {
             longDescription = field("hintergrund", base.longDescription),
             scenario = field("szene", base.scenario),
             starters = starters?.ifEmpty { null } ?: base.starters,
+            gender = when (o.optString("geschlecht").trim().lowercase().take(1)) {
+                "m" -> Gender.MALE
+                "w", "f" -> Gender.FEMALE
+                "d" -> Gender.DIVERSE
+                else -> base.gender
+            },
         )
     }
 }

@@ -7,6 +7,11 @@ import de.davscha.characterfun.i18n.I18n
  * Dazu kommen die Erinnerungen: was die Figur über dich weiß, angeheftete Notizen und
  * die Zusammenfassung älterer Nachrichten. Kurz halten: kleine Modelle vergessen sonst, wer sie sind.
  */
+/** Geschlecht des Nutzers (aus den Einstellungen) – gilt für alle Prompts */
+object UserGender {
+    @Volatile var value: Gender = Gender.UNKNOWN
+}
+
 object PromptBuilder {
 
     fun build(
@@ -16,9 +21,11 @@ object PromptBuilder {
         summary: String = "",
         game: GameState? = null,
         mood: Boolean = false,
+        userGender: Gender = UserGender.value,
     ): String = buildString {
         appendLine("Du spielst in einem Rollenspiel-Chat die Figur \"${c.name}\".")
         if (c.shortDescription.isNotBlank()) appendLine(c.shortDescription.trim())
+        if (c.gender != Gender.UNKNOWN) appendLine("Geschlecht von ${c.name}: ${c.gender.prompt}.")
         if (c.definition.isNotBlank()) {
             appendLine()
             appendLine(c.definition.trim())
@@ -34,6 +41,9 @@ object PromptBuilder {
         if (aboutUser.isNotBlank()) {
             appendLine()
             appendLine("Über dein Gegenüber im Chat: ${aboutUser.trim()}")
+        }
+        if (userGender != Gender.UNKNOWN) {
+            appendLine("Dein Gegenüber im Chat ist ${userGender.prompt} – sprich es grammatisch passend an.")
         }
         if (memories.isNotEmpty()) {
             appendLine()

@@ -5,6 +5,7 @@ object SampleCharacters {
 
     val kraken = Character(
         id = "sample-kraken",
+        gender = Gender.MALE,
         name = "Kapitän Kraken",
         emoji = "🐙",
         category = Category.ABENTEUER,
@@ -26,6 +27,7 @@ object SampleCharacters {
 
     val quark = Character(
         id = "sample-quark",
+        gender = Gender.MALE,
         name = "Professor Quark",
         emoji = "🧪",
         category = Category.LERNEN,
@@ -43,6 +45,7 @@ object SampleCharacters {
 
     val hilde = Character(
         id = "sample-hilde",
+        gender = Gender.FEMALE,
         name = "Oma Hilde",
         emoji = "🍲",
         category = Category.HELFER,
@@ -62,6 +65,7 @@ object SampleCharacters {
 
     val byte = Character(
         id = "sample-byte",
+        gender = Gender.DIVERSE,
         name = "Byte",
         emoji = "🤖",
         category = Category.SPIELE,
@@ -81,6 +85,7 @@ object SampleCharacters {
 
     val nebelfeld = Character(
         id = "sample-nebelfeld",
+        gender = Gender.FEMALE,
         name = "Lady Nebelfeld",
         emoji = "🕵️‍♀️",
         category = Category.GESCHICHTEN,
@@ -101,6 +106,7 @@ object SampleCharacters {
 
     val luca = Character(
         id = "sample-luca",
+        gender = Gender.MALE,
         name = "Luca",
         emoji = "🗣️",
         category = Category.SPRACHEN,
