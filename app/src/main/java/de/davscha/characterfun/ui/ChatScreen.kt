@@ -5,6 +5,14 @@ import de.davscha.characterfun.i18n.tr
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.SportsEsports
+import androidx.compose.material.icons.filled.FastForward
+import androidx.compose.material.icons.filled.AutoFixHigh
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.automirrored.filled.MenuBook
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
+import de.davscha.characterfun.data.AiHelpers
 import de.davscha.characterfun.data.Game
 import de.davscha.characterfun.data.GameState
 import de.davscha.characterfun.data.Games
@@ -113,6 +121,8 @@ fun ChatScreen(vm: AppViewModel) {
     if (showMemories) MemoriesDialog(vm, c) { showMemories = false }
     var showGames by remember { mutableStateOf(false) }
     if (showGames) GamePickerDialog(vm, c) { showGames = false }
+    var showStory by remember { mutableStateOf(false) }
+    if (showStory) StoryDialog(vm, c) { showStory = false }
 
     // Nachricht bearbeiten
     var editIndex by remember { mutableStateOf(-1) }
@@ -177,6 +187,9 @@ fun ChatScreen(vm: AppViewModel) {
                     if (vm.autoRead) "Automatisch vorlesen: an" else "Automatisch vorlesen: aus",
                     tint = if (vm.autoRead) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            }
+            IconButton(onClick = { showStory = true }, enabled = vm.chatReady && !vm.isGenerating && vm.messages.any { it.fromUser }) {
+                Icon(Icons.AutoMirrored.Filled.MenuBook, tr("Als Geschichte"))
             }
             IconButton(onClick = { showGames = true }, enabled = vm.chatReady && !vm.isGenerating) {
                 Icon(Icons.Default.SportsEsports, tr("Spiel starten"), tint = MaterialTheme.colorScheme.secondary)
@@ -453,6 +466,9 @@ private fun MessageBubble(
                     IconButton(onClick = { rerollVm.regenerate() }, modifier = Modifier.size(32.dp)) {
                         Icon(Icons.Default.Casino, "Neu würfeln", modifier = Modifier.size(18.dp))
                     }
+                    IconButton(onClick = { rerollVm.continueReply() }, modifier = Modifier.size(32.dp)) {
+                        Icon(Icons.Default.FastForward, tr("Weiterschreiben"), modifier = Modifier.size(18.dp))
+                    }
                 }
                 msg.stats?.let {
                     Text(it, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 4.dp))
@@ -561,6 +577,31 @@ private fun InputBar(vm: AppViewModel, c: Character, text: TextFieldValue, onTex
             enabled = vm.imagesSupported && !vm.isGenerating,
             modifier = Modifier.size(52.dp),
         ) { Icon(Icons.Default.AddPhotoAlternate, "Bild schicken") }
+        // Stil-Knopf: deine Nachricht lustiger, dramatischer … umschreiben lassen
+        Box {
+            var styleMenu by remember { mutableStateOf(false) }
+            val scope = rememberCoroutineScope()
+            if (vm.helperBusy) {
+                Box(Modifier.size(52.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp) }
+            } else IconButton(
+                onClick = { styleMenu = true },
+                enabled = vm.chatReady && !vm.isGenerating && text.text.isNotBlank(),
+                modifier = Modifier.size(52.dp),
+            ) { Icon(Icons.Default.AutoFixHigh, tr("Stil ändern")) }
+            DropdownMenu(expanded = styleMenu, onDismissRequest = { styleMenu = false }) {
+                AiHelpers.styles.forEach { (label, style) ->
+                    DropdownMenuItem(text = { Text(tr(label)) }, onClick = {
+                        styleMenu = false
+                        val original = text.text
+                        scope.launch {
+                            runCatching { vm.restyle(original, style) }
+                                .onSuccess { onText(TextFieldValue(it, TextRange(it.length))) }
+                                .onFailure { Toast.makeText(context, it.message ?: tr("Fehler"), Toast.LENGTH_LONG).show() }
+                        }
+                    })
+                }
+            }
+        }
         // Ideen-Knopf: Gemma schlägt fünf mögliche nächste Nachrichten vor
         IconButton(
             onClick = { vm.suggestReplies() },
@@ -586,6 +627,9 @@ private fun InputBar(vm: AppViewModel, c: Character, text: TextFieldValue, onTex
 @Composable
 private fun MemoriesDialog(vm: AppViewModel, c: Character, onClose: () -> Unit) {
     var newMemory by remember { mutableStateOf("") }
+    var ideas by remember { mutableStateOf(emptyList<String>()) }
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     AlertDialog(
         onDismissRequest = onClose,
         title = { Text(tr("Erinnerungen von %s", c.name)) },
@@ -617,6 +661,36 @@ private fun MemoriesDialog(vm: AppViewModel, c: Character, onClose: () -> Unit) 
                     )
                     IconButton(onClick = { vm.addMemory(newMemory); newMemory = "" }, enabled = newMemory.isNotBlank()) {
                         Icon(Icons.Default.Add, "Hinzufügen")
+                    }
+                }
+                // KI-Vorschläge zum Anheften
+                if (vm.messages.any { it.fromUser }) {
+                    if (vm.helperBusy) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                            Spacer(Modifier.width(10.dp))
+                            Text(tr("Gemma sucht Wichtiges heraus …"), fontSize = 13.sp)
+                        }
+                    } else {
+                        TextButton(onClick = {
+                            scope.launch {
+                                runCatching { vm.suggestMemories() }
+                                    .onSuccess { ideas = it; if (it.isEmpty()) Toast.makeText(context, tr("Nichts Neues gefunden."), Toast.LENGTH_SHORT).show() }
+                                    .onFailure { Toast.makeText(context, it.message ?: tr("Fehler"), Toast.LENGTH_LONG).show() }
+                            }
+                        }) {
+                            Icon(Icons.Default.Lightbulb, null)
+                            Spacer(Modifier.width(6.dp))
+                            Text(tr("Vorschläge von der KI"))
+                        }
+                    }
+                    ideas.forEach { idea ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(idea, fontSize = 14.sp, fontStyle = FontStyle.Italic, modifier = Modifier.weight(1f))
+                            IconButton(onClick = { vm.addMemory(idea); ideas = ideas - idea }) {
+                                Icon(Icons.Default.PushPin, tr("Anheften"), tint = MaterialTheme.colorScheme.secondary)
+                            }
+                        }
                     }
                 }
                 if (vm.summary.isNotBlank()) {
@@ -693,4 +767,50 @@ private fun GameBanner(vm: AppViewModel, state: GameState) {
         }
         TextButton(onClick = { vm.endGame() }) { Text(tr("Spiel beenden")) }
     }
+}
+
+/** Das Gespräch als kurze Geschichte – zum Nachlesen, Kopieren und Teilen */
+@Composable
+private fun StoryDialog(vm: AppViewModel, c: Character, onClose: () -> Unit) {
+    var story by remember { mutableStateOf<String?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+    val context = LocalContext.current
+    LaunchedEffect(Unit) {
+        runCatching { vm.chatAsStory() }.onSuccess { story = it }.onFailure { error = it.message ?: tr("Fehler") }
+    }
+    AlertDialog(
+        onDismissRequest = onClose,
+        title = { Text(tr("Euer Gespräch als Geschichte")) },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                when {
+                    error != null -> Text(error!!, color = MaterialTheme.colorScheme.error)
+                    story == null -> Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                        Spacer(Modifier.width(12.dp))
+                        Text(tr("%s erzählt …", c.name))
+                    }
+                    else -> {
+                        val lines = story!!.lines()
+                        Text(lines.first().trim('#', '*', ' '), fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                        Text(roleplayText(lines.drop(1).joinToString("\n").trim()), fontSize = 15.sp, lineHeight = 22.sp)
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onClose) { Text(tr("Fertig")) } },
+        dismissButton = {
+            if (story != null) Row {
+                IconButton(onClick = {
+                    val cm = context.getSystemService(android.content.ClipboardManager::class.java)
+                    cm.setPrimaryClip(android.content.ClipData.newPlainText("Geschichte", story))
+                    Toast.makeText(context, tr("Kopiert"), Toast.LENGTH_SHORT).show()
+                }) { Icon(Icons.Default.ContentCopy, tr("Kopieren")) }
+                IconButton(onClick = {
+                    val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, story)
+                    context.startActivity(Intent.createChooser(send, null))
+                }) { Icon(Icons.Default.Share, tr("Teilen")) }
+            }
+        },
+    )
 }

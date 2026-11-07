@@ -37,11 +37,11 @@ Stand: 7. November 2026. Abhaken mit `[x]`, sobald etwas fertig ist.
 
 ## Runde 2 – KI-Hilfen (Etappe C)
 
-- [ ] **19. „Weiterschreiben“** – die Figur hängt einen Absatz an ihre letzte Antwort an
-- [ ] **20. Stil-Knopf** – deine Nachricht lustiger / dramatischer / im Erzählmodus umschreiben
-- [ ] **21. Steckbrief-Check** – die KI prüft ein Profil auf Lücken und Widersprüche
-- [ ] **22. Erinnerungs-Vorschläge** – nach dem Gespräch 2–3 Vorschläge zum Anheften
-- [ ] **23. Kapitel-Zusammenfassung** – langer Chat als kurze Geschichte zum Nachlesen/Teilen
+- [x] **19. „Weiterschreiben“** – die Figur hängt einen Absatz an ihre letzte Antwort an
+- [x] **20. Stil-Knopf** – deine Nachricht lustiger / dramatischer / im Erzählmodus umschreiben
+- [x] **21. Steckbrief-Check** – die KI prüft ein Profil auf Lücken und Widersprüche
+- [x] **22. Erinnerungs-Vorschläge** – nach dem Gespräch 2–3 Vorschläge zum Anheften
+- [x] **23. Kapitel-Zusammenfassung** – langer Chat als kurze Geschichte zum Nachlesen/Teilen
 
 ## Runde 2 – Spaß (Etappe D)
 

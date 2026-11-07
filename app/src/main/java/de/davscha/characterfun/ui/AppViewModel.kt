@@ -19,6 +19,7 @@ import de.davscha.characterfun.data.Character
 import de.davscha.characterfun.data.ChatMessage
 import de.davscha.characterfun.data.SavedChat
 import de.davscha.characterfun.data.Room
+import de.davscha.characterfun.data.AiHelpers
 import de.davscha.characterfun.data.RoomGameState
 import de.davscha.characterfun.data.RoomGameType
 import de.davscha.characterfun.data.RoomGames
@@ -815,7 +816,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun send(text: String) {
         val input = text.trim()
         val image = pendingImage
-        if ((input.isEmpty() && image == null) || isGenerating || suggesting || !chatReady) return
+        if ((input.isEmpty() && image == null) || isGenerating || suggesting || helperBusy || !chatReady) return
         suggestions.clear()
         stopSpeaking()
         pendingImage = null
@@ -1020,6 +1021,106 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun clearSuggestions() = suggestions.clear()
+
+    // ---------- KI-Hilfen ----------
+
+    /** true, während eine KI-Hilfe (Stil, Check, Erinnerungen, Geschichte) arbeitet */
+    var helperBusy by mutableStateOf(false)
+        private set
+
+    /** Irgendein Modell bereit machen – ein schon geladenes wird einfach benutzt. */
+    private suspend fun helperModelReady() {
+        if (engineState is EngineState.Ready) return
+        if (preparing) chatJob?.join()
+        if (engineState is EngineState.Ready) return
+        val model = defaultModel
+        require(useOllama || downloads[model.id] == DownloadState.Done) { tr("%s ist noch nicht heruntergeladen (Seite \"Einstellungen\").", model.title) }
+        ensureModelLoaded(model)
+    }
+
+    /** Eine einzelne Frage ans Modell, außerhalb des Chats */
+    private suspend fun askHelper(system: String, prompt: String, temp: Double = 0.7): String {
+        check(!isGenerating && !roomBusy && !suggesting && !helperBusy) { tr("Es läuft gerade noch eine Antwort.") }
+        helperBusy = true
+        try {
+            helperModelReady()
+            withContext(Dispatchers.IO) { engine.startConversation(system, emptyList(), temp) }
+            needsRebuild = true // der Chat wird vor der nächsten Nachricht neu aufgebaut
+            val sb = StringBuilder()
+            engine.send(prompt).collect { sb.append(it) }
+            return sb.toString().trim()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            engine.stop()
+            throw e
+        } finally {
+            helperBusy = false
+        }
+    }
+
+    private fun recentMessages(maxChars: Int): List<ChatMessage> {
+        val recent = ArrayDeque<ChatMessage>()
+        var chars = 0
+        for (m in messages.asReversed()) {
+            if (chars + m.text.length > maxChars && recent.isNotEmpty()) break
+            recent.addFirst(m)
+            chars += m.text.length
+        }
+        return recent.toList()
+    }
+
+    /** Stil-Knopf: deine Nachricht umschreiben (lustiger, dramatischer …) */
+    suspend fun restyle(text: String, style: String): String {
+        val c = chatCharacter ?: return text
+        val last = messages.lastOrNull { !it.fromUser }?.text
+        return askHelper(AiHelpers.STYLE_SYSTEM, AiHelpers.stylePrompt(text, style, c.name, last), 0.9)
+            .trim().trim('"', '„', '“').ifBlank { text }
+    }
+
+    /** Steckbrief-Check im Editor */
+    suspend fun checkProfile(c: Character): String = askHelper(AiHelpers.CHECK_SYSTEM, AiHelpers.checkPrompt(c))
+
+    /** Bis zu drei Vorschläge für Erinnerungen aus dem Gespräch */
+    suspend fun suggestMemories(): List<String> {
+        val c = chatCharacter ?: return emptyList()
+        val answer = askHelper(AiHelpers.MEMORY_SYSTEM, AiHelpers.memoryPrompt(c.name, recentMessages(4000), memories.toList()), 0.5)
+        return ReplySuggestions.parse(answer).filter { it !in memories }.take(3)
+    }
+
+    /** Das Gespräch als kurze Geschichte */
+    suspend fun chatAsStory(): String {
+        val c = chatCharacter ?: return ""
+        return askHelper(AiHelpers.STORY_SYSTEM, AiHelpers.storyPrompt(c.name, aboutUser, summary, recentMessages(HISTORY_CHARS)), 0.8)
+    }
+
+    /** Weiterschreiben: die Figur setzt ihre letzte Antwort fort, ohne dass du etwas schreibst */
+    fun continueReply() {
+        val c = chatCharacter ?: return
+        if (isGenerating || suggesting || helperBusy || !chatReady) return
+        val idx = messages.lastIndex
+        val last = messages.getOrNull(idx)?.takeIf { !it.fromUser && it.text.isNotBlank() } ?: return
+        isGenerating = true
+        viewModelScope.launch {
+            val base = last.text
+            val add = StringBuilder()
+            try {
+                if (needsRebuild) rebuild(c, messages.toList())
+                engine.send("(Erzähl einfach weiter: Setze deine letzte Antwort mit einem neuen Absatz fort, ohne etwas zu wiederholen und ohne auf mich zu warten.)")
+                    .collect { chunk ->
+                        add.append(chunk)
+                        if (idx < messages.size) messages[idx] = messages[idx].withText(base + "\n\n" + add)
+                    }
+                if (idx < messages.size) messages[idx] = messages[idx].withText((base + "\n\n" + add.toString().trim()).trim()).copy(stats = null)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Nicht geklappt – die alte Antwort bleibt
+            } finally {
+                isGenerating = false
+                needsRebuild = true // die Anweisung "erzähl weiter" soll nicht im Verlauf bleiben
+                saveChat()
+            }
+        }
+    }
 
     // ---------- Figur mit KI erstellen ----------
 

@@ -1,5 +1,9 @@
 package de.davscha.characterfun.ui
 
+import androidx.compose.foundation.layout.Box
+
+import androidx.compose.material.icons.filled.Checklist
+
 import de.davscha.characterfun.i18n.tr
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.material3.Checkbox
@@ -123,6 +127,7 @@ fun EditorScreen(vm: AppViewModel, characterId: String?) {
                     c = generated
                     starters = (generated.starters + List(3) { "" }).take(3)
                 }
+                ProfileCheck(vm, c.copy(starters = starters.filter { it.isNotBlank() }))
 
                 // Avatar
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -413,5 +418,45 @@ private fun VoiceSection(vm: AppViewModel, c: Character, onChange: (Character) -
             Text(tr("Probe hören"))
         }
         TextButton(onClick = { onChange(c.copy(voicePitch = 1f, voiceRate = 1f)) }) { Text(tr("Tonhöhe und Tempo zurücksetzen")) }
+    }
+}
+
+/** Steckbrief-Check: die KI gibt Tipps, was fehlt oder sich widerspricht */
+@Composable
+private fun ProfileCheck(vm: AppViewModel, c: Character) {
+    val scope = rememberCoroutineScope()
+    var tips by remember { mutableStateOf<String?>(null) }
+    var running by remember { mutableStateOf(false) }
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        OutlinedButton(
+            onClick = {
+                running = true
+                tips = null
+                scope.launch {
+                    tips = runCatching { vm.checkProfile(c) }.getOrElse { "⚠ " + (it.message ?: tr("Fehler")) }
+                    running = false
+                }
+            },
+            enabled = !running && c.name.isNotBlank(),
+        ) {
+            if (running) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+            else Icon(Icons.Default.Checklist, null)
+            Spacer(Modifier.width(8.dp))
+            Text(if (running) tr("Gemma liest den Steckbrief …") else tr("Steckbrief prüfen"))
+        }
+        tips?.let {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .padding(12.dp)
+            ) {
+                Column {
+                    Text(it, fontSize = 14.sp)
+                    TextButton(onClick = { tips = null }) { Text(tr("Ausblenden")) }
+                }
+            }
+        }
     }
 }
