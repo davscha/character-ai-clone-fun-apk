@@ -66,7 +66,28 @@ data class Character(
     /** Name der Android-Stimme (leer = Standardstimme für Deutsch) */
     val voiceName: String = "",
     val gender: Gender = Gender.UNKNOWN,
+    // ---------- Bilder (ComfyUI) ----------
+    /** Aussehen als Bild-Tags, z. B. "long hair, blonde hair, green eyes, glasses" (ohne Kleidung) */
+    val appearance: String = "",
+    /** Vorschaubild des Aussehens (Dateiname im Fundus-Ordner) */
+    val appearancePreview: String = "",
+    /** Kleidung aus dem Fundus, die diese Figur im Schrank hat (Ids) */
+    val wardrobe: List<String> = emptyList(),
+    /** Standard-Outfit (Id aus dem Fundus, leer = keins) */
+    val defaultOutfitId: String = "",
+    /** Fester Startwert, damit die Figur auf allen Bildern ähnlich aussieht */
+    val imageSeed: Long = 0,
+    /** Eigener Stil (Id aus dem Fundus, leer = Standard-Stil) */
+    val styleId: String = "",
 ) {
+    /** Geschlecht als Bild-Tag */
+    val genderTag: String get() = when (gender) {
+        Gender.MALE -> "1boy"
+        Gender.FEMALE -> "1girl"
+        Gender.DIVERSE -> "1other"
+        Gender.UNKNOWN -> ""
+    }
+
     fun toJson(): JSONObject = JSONObject()
         .put("id", id)
         .put("name", name)
@@ -86,6 +107,12 @@ data class Character(
         .put("voiceRate", voiceRate.toDouble())
         .put("voiceName", voiceName)
         .put("geschlecht", gender.name)
+        .put("aussehen", appearance)
+        .put("aussehenVorschau", appearancePreview)
+        .put("schrank", JSONArray(wardrobe))
+        .put("standardOutfit", defaultOutfitId)
+        .put("bildStartwert", imageSeed)
+        .put("stil", styleId)
 
     companion object {
         fun fromJson(o: JSONObject) = Character(
@@ -108,6 +135,12 @@ data class Character(
             voiceRate = o.optDouble("voiceRate", 1.0).toFloat(),
             voiceName = o.optString("voiceName"),
             gender = Gender.of(o.optString("geschlecht")),
+            appearance = o.optString("aussehen"),
+            appearancePreview = o.optString("aussehenVorschau"),
+            wardrobe = o.optJSONArray("schrank")?.let { a -> List(a.length()) { a.optString(it) } }.orEmpty(),
+            defaultOutfitId = o.optString("standardOutfit"),
+            imageSeed = o.optLong("bildStartwert"),
+            styleId = o.optString("stil"),
         )
     }
 }

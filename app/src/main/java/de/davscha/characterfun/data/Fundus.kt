@@ -111,6 +111,14 @@ object ImagePrompt {
     /** Zusätzlich verboten bei Kleidungs-Vorschauen: Mehrfachansichten */
     const val CLOTHING_PREVIEW_NEGATIVE = "multiple views, reference sheet, character sheet, multiple girls, multiple boys, mannequin"
     const val STYLE_PREVIEW = "1girl, smile, upper body, flower field, outdoors, looking at viewer"
+
+    /** Vorschau des Aussehens: Oberkörper, Gesicht gut zu sehen */
+    fun appearancePreview(c: Character, outfit: FundusItem?) =
+        join("solo", c.genderTag, c.appearance, outfit?.tags, "upper body, looking at viewer, smile, simple background")
+
+    /** Anprobieren: die Figur in einem Outfit, ganzer Körper, eine Ansicht */
+    fun tryOn(c: Character, outfit: FundusItem) =
+        join("solo", c.genderTag, c.appearance, outfit.tags, "standing, full body, front view, looking at viewer, simple background, white background")
 }
 
 /** Welche Liste im Fundus */

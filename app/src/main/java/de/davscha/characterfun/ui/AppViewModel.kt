@@ -1424,6 +1424,24 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Stil einer Figur (eigener oder Standard) */
+    fun styleFor(c: Character): StyleItem? = fundus.styles.firstOrNull { it.id == c.styleId } ?: fundus.defaultStyle
+
+    fun clothing(id: String) = fundus.clothing.firstOrNull { it.id == id }
+
+    /** Malt die Figur – [outfit] = null: Aussehens-Vorschau (mit Standard-Outfit), sonst Anprobieren. Gibt den Dateinamen zurück. */
+    suspend fun paintCharacter(c: Character, outfit: FundusItem?, randomSeed: Boolean = false, onProgress: (Int) -> Unit = {}): String {
+        val tags = if (outfit == null) ImagePrompt.appearancePreview(c, clothing(c.defaultOutfitId)) else ImagePrompt.tryOn(c, outfit)
+        val seed = c.imageSeed.takeIf { it > 0 && !randomSeed } ?: (0..999_999_999L).random()
+        val png = paint(tags, styleFor(c), seed, ImagePrompt.CLOTHING_PREVIEW_NEGATIVE, onProgress)
+        return withContext(Dispatchers.IO) { repo.saveFundusImage("figur", png) }
+    }
+
+    /** Ein gemaltes Bild als Avatar übernehmen; gibt den neuen Avatar-Dateinamen zurück */
+    suspend fun adoptAvatar(imageName: String, characterId: String, fullBody: Boolean): String? = withContext(Dispatchers.IO) {
+        repo.fundusImage(imageName)?.let { repo.adoptAvatar(it, characterId, fullBody) }
+    }
+
     /** Gemma macht aus einer Beschreibung (z. B. "gemütliches Café am Abend") Bild-Tags */
     suspend fun tagsFromDescription(description: String, kind: FundusKind?): String {
         val what = when (kind) {

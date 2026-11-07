@@ -126,6 +126,18 @@ class CharacterRepository(private val context: Context) {
         return name
     }
 
+    /** Ein Bild aus dem Fundus-Ordner als Avatar übernehmen. [topFocus] = oberen Teil nehmen (Ganzkörperbild → Gesicht). */
+    fun adoptAvatar(file: File, characterId: String, topFocus: Boolean): String? = runCatching {
+        val bmp = BitmapFactory.decodeFile(file.absolutePath) ?: return null
+        val side = if (topFocus) (minOf(bmp.width, bmp.height) * 0.55f).toInt() else minOf(bmp.width, bmp.height)
+        val x = (bmp.width - side) / 2
+        val y = if (topFocus) (bmp.height * 0.04f).toInt() else (bmp.height - side) / 2
+        val square = Bitmap.createScaledBitmap(Bitmap.createBitmap(bmp, x, y, side, side), 512, 512, true)
+        val name = "$characterId-${System.currentTimeMillis()}.jpg"
+        File(avatarDir, name).outputStream().use { square.compress(Bitmap.CompressFormat.JPEG, 90, it) }
+        name
+    }.getOrNull()
+
     /** Eigener Workflow (API-Format) oder null = eingebaute Vorlage */
     fun loadWorkflow(): String? = workflowFile.takeIf { it.exists() }?.readText()
 

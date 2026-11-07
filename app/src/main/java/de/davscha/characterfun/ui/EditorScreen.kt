@@ -227,6 +227,8 @@ fun EditorScreen(vm: AppViewModel, characterId: String?) {
 
                 VoiceSection(vm, c) { c = it }
 
+                CharacterImageSection(vm, c) { c = it }
+
                 Text(tr("Gesprächsstarter (optional)"), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 starters.forEachIndexed { i, s ->
                     OutlinedTextField(
