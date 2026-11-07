@@ -247,6 +247,13 @@ private fun FundusItemDialog(vm: AppViewModel, kind: FundusKind, original: Fundu
                         else Icon(Icons.Default.AutoFixHigh, tr("Tags schreiben lassen"))
                     }
                 }
+                if (kind == FundusKind.CLOTHING) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(tr("Vorschau trägt:"), fontSize = 13.sp)
+                        FilterChip(selected = item.model == "1girl", onClick = { item = item.copy(model = "1girl") }, label = { Text("👩 " + tr("Frau")) })
+                        FilterChip(selected = item.model == "1boy", onClick = { item = item.copy(model = "1boy") }, label = { Text("👨 " + tr("Mann")) })
+                    }
+                }
                 PreviewBox(
                     vm, item.id, preview, if (kind == FundusKind.LOCATION) "🏞️" else "👗",
                     Modifier.fillMaxWidth().heightIn(max = 320.dp).aspectRatio(1f).clip(RoundedCornerShape(12.dp)),

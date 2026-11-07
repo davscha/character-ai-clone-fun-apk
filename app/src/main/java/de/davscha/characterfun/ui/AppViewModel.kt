@@ -1334,12 +1334,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Malt ein Bild: Basis + Trigger des Stils + [tags]. Gibt die PNG-Bytes zurück. */
-    suspend fun paint(tags: String, style: StyleItem? = null, seed: Long = (0..999_999_999L).random(), onProgress: (Int) -> Unit = {}): ByteArray {
+    suspend fun paint(tags: String, style: StyleItem? = null, seed: Long = (0..999_999_999L).random(), extraNegative: String = "", onProgress: (Int) -> Unit = {}): ByteArray {
         require(comfyConfigured) { tr("ComfyUI ist noch nicht eingerichtet (Einstellungen → Bilder).") }
         val st = style ?: fundus.defaultStyle
         val positive = ImagePrompt.join(basePositive, st?.trigger, tags)
         try {
-            return comfy.generate(workflowTemplate, positive, baseNegative, seed, st?.lora, st?.strength ?: 1f, onProgress = onProgress)
+            return comfy.generate(workflowTemplate, positive, ImagePrompt.join(baseNegative, extraNegative), seed, st?.lora, st?.strength ?: 1f, onProgress = onProgress)
         } catch (e: java.io.IOException) {
             // PC aus oder ComfyUI beendet: Knöpfe ausgrauen, bis der nächste Test klappt
             if (e is java.net.ConnectException || e is java.net.SocketTimeoutException || e is java.net.NoRouteToHostException) {
@@ -1393,7 +1393,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             try {
                 val tags = if (kind == FundusKind.LOCATION) ImagePrompt.locationPreview(item) else ImagePrompt.clothingPreview(item)
-                val png = paint(tags)
+                val png = paint(tags, extraNegative = if (kind == FundusKind.CLOTHING) ImagePrompt.CLOTHING_PREVIEW_NEGATIVE else "")
                 val name = withContext(Dispatchers.IO) { repo.saveFundusImage(if (kind == FundusKind.LOCATION) "ort" else "kleidung", png) }
                 val current = fundus.list(kind).firstOrNull { it.id == item.id } ?: item
                 saveFundusItem(kind, current.copy(preview = name))

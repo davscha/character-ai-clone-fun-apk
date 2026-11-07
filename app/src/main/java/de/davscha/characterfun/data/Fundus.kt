@@ -11,13 +11,16 @@ data class FundusItem(
     val tags: String = "",
     /** Dateiname des Vorschaubilds im Ordner Fundus (oder leer) */
     val preview: String = "",
+    /** Nur bei Kleidung: wer die Vorschau trägt – "1girl" oder "1boy" */
+    val model: String = "1girl",
 ) {
-    fun toJson(): JSONObject = JSONObject().put("id", id).put("name", name).put("tags", tags).put("vorschau", preview)
+    fun toJson(): JSONObject = JSONObject().put("id", id).put("name", name).put("tags", tags).put("vorschau", preview).put("model", model)
 
     companion object {
         fun fromJson(o: JSONObject) = FundusItem(
             o.optString("id").ifEmpty { UUID.randomUUID().toString() },
             o.optString("name"), o.optString("tags"), o.optString("vorschau"),
+            o.optString("model").ifEmpty { "1girl" },
         )
     }
 }
@@ -82,7 +85,7 @@ data class Fundus(
                     FundusItem(name = "Alltag mit Mantel", tags = "brown coat, white sweater, turtleneck, black pants"),
                     FundusItem(name = "Abendkleid", tags = "black dress, evening gown, long dress, earrings"),
                     FundusItem(name = "Regenmantel", tags = "yellow raincoat, hood, rubber boots"),
-                    FundusItem(name = "Piratenmantel", tags = "pirate coat, red coat, tricorne, boots, belt"),
+                    FundusItem(name = "Piratenmantel", tags = "pirate coat, red coat, tricorne, boots, belt", model = "1boy"),
                     FundusItem(name = "Pyjama", tags = "pajamas, striped pajamas, slippers"),
                     FundusItem(name = "Sportlich", tags = "hoodie, track pants, sneakers"),
                 ),
@@ -103,7 +106,10 @@ object ImagePrompt {
         .joinToString(", ")
 
     fun locationPreview(item: FundusItem) = join(item.tags, "scenery, no humans")
-    fun clothingPreview(item: FundusItem) = join("mannequin, dress form", item.tags, "full body, simple background, white background, no humans")
+    /** Eine Person als Model, eine einzige Ansicht von vorn */
+    fun clothingPreview(item: FundusItem) = join("solo", item.model, item.tags, "standing, full body, front view, looking at viewer, simple background, white background")
+    /** Zusätzlich verboten bei Kleidungs-Vorschauen: Mehrfachansichten */
+    const val CLOTHING_PREVIEW_NEGATIVE = "multiple views, reference sheet, character sheet, multiple girls, multiple boys, mannequin"
     const val STYLE_PREVIEW = "1girl, smile, upper body, flower field, outdoors, looking at viewer"
 }
 
