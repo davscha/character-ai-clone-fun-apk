@@ -55,6 +55,15 @@ Stand: 7. November 2026. Abhaken mit `[x]`, sobald etwas fertig ist.
 
 - [x] **33. Bild als Nachricht** – die KI schaut sich ein Bild an und schreibt daraus deine Nachricht (auch im Room); Geschlecht für dich und jede Figur, damit Anrede und Ich-Form stimmen
 
+## Runde 3 – Bilder mit ComfyUI (PC 192.168.178.41, Port 8080)
+
+Grundeinstellungen: Positiv-Basis `masterpiece, highres, PandorasBoxStyle`, Negativ-Basis `lowres, photorealistic, photo background, multiple views` – beides in den Einstellungen änderbar. Standard-LoRA: `NoobAi\PandorasBoxStyle.safetensors` (Stärke 1). Davids Workflow (SDXL, 12 Schritte, euler, cfg 4, 1024×1024) dient als Vorlage; die App tauscht nur Prompt, Startwert und LoRA aus.
+
+- [ ] **F1. ComfyUI-Anbindung + Fundus** – Verbindung/Test in den Einstellungen, Basis-Prompts, Workflow-Vorlage; eigenes Menü „Fundus“ mit gemeinsamen Listen für alle Figuren: Orte, Kleidung (je Name + Tags + Vorschaubild) und Stile (LoRA aus ComfyUI-Liste, Stärke, Zusatz-Tags)
+- [ ] **F2. Figurenblatt** – Aussehen (Tags + Vorschau), Schrank (Kleidung aus dem Fundus ankreuzen, Standard-Outfit), „Anprobieren“, Vorschau als Avatar übernehmen, eigener Startwert
+- [ ] **F3. Im Chat** – Ort und Kleidung wählen (Hinweis der Spielleitung bei Wechsel, Figur weiß Bescheid), „Bild von der Szene“ (Gemma schreibt die Szenen-Tags), auch in der Bildhilfe und im Room (eine Figur pro Bild)
+- [ ] **F4. Bilderbuch** – Bilder aus dem Chat mit Erzähltext als PDF zum Blättern und Teilen
+
 ## Runde 2 – Praktisches (Etappe E)
 
 - [ ] **29. Suche in alten Chats**
