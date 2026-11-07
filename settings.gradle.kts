@@ -16,4 +16,3 @@ dependencyResolutionManagement {
 
 rootProject.name = "CharacterFun"
 include(":app")
-include(":bildtest")
