@@ -1,5 +1,8 @@
 package de.davscha.characterfun.ui
 
+import de.davscha.characterfun.i18n.AppLanguage
+import de.davscha.characterfun.i18n.I18n
+import de.davscha.characterfun.i18n.tr
 import android.app.Application
 import android.content.Context
 import android.net.Uri
@@ -144,7 +147,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** Verbindungstest: Ollama erreichbar? Welche Modelle gibt es, und welche können Bilder? */
     fun testOllama() {
         if (ollamaHost.isBlank()) {
-            ollamaStatus = OllamaStatus.Failed("Bitte die IP-Adresse des PCs eintragen.")
+            ollamaStatus = OllamaStatus.Failed(tr("Bitte die IP-Adresse des PCs eintragen."))
             return
         }
         ollamaStatus = OllamaStatus.Testing
@@ -164,7 +167,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 OllamaStatus.Ok(version, models)
             } catch (e: Exception) {
                 OllamaStatus.Failed(
-                    "Nicht erreichbar – läuft der PC und ist Ollama fürs Netzwerk freigegeben? (${e.message ?: e.javaClass.simpleName})"
+                    tr("Nicht erreichbar – läuft der PC und ist Ollama fürs Netzwerk freigegeben? (%s)", e.message ?: e.javaClass.simpleName)
                 )
             }
         }
@@ -245,17 +248,24 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         private set
 
     init {
+        // Sprache der Oberfläche
+        I18n.lang = AppLanguage.entries.firstOrNull { it.name == prefs.getString("sprache", null) } ?: AppLanguage.DE
         refreshStorage()
         val savedId = prefs.getString("modell", null)
         selectedModel = allModels.firstOrNull { it.id == savedId } ?: ModelCatalog.E2B
         // Ist die App beim letzten Laden abgestürzt (z. B. Modell zu groß)? Dann zurück zu E2B.
         prefs.getString("lade_modell", null)?.let { crashedId ->
             val title = allModels.firstOrNull { it.id == crashedId }?.title ?: crashedId.removePrefix("custom:")
-            crashNotice = "Beim letzten Laden von $title ist die App abgestürzt – vermutlich ist das Modell zu groß " +
-                "für dieses Tablet. Es ist wieder Gemma 4 E2B ausgewählt."
+            crashNotice = tr("Beim letzten Laden von %s ist die App abgestürzt – vermutlich ist das Modell zu groß für dieses Tablet. Es ist wieder Gemma 4 E2B ausgewählt.", title)
             prefs.edit().remove("lade_modell").putString("modell", ModelCatalog.E2B.id).apply()
             selectedModel = ModelCatalog.E2B
         }
+    }
+
+    fun changeLanguage(lang: AppLanguage) {
+        I18n.lang = lang
+        prefs.edit().putString("sprache", lang.name).apply()
+        needsRebuild = true // Figuren antworten ab der nächsten Nachricht in der neuen Sprache
     }
 
     fun dismissCrashNotice() {
@@ -313,7 +323,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     }
                     downloads[m.id] = DownloadState.Done
                 } catch (e: Exception) {
-                    downloads[m.id] = DownloadState.Failed("Umzug fehlgeschlagen: ${e.message}")
+                    downloads[m.id] = DownloadState.Failed(tr("Umzug fehlgeschlagen: %s", e.message))
                 }
             }
         }
@@ -349,7 +359,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 downloads[model.id] = DownloadState.Missing
                 throw e
             } catch (e: Exception) {
-                downloads[model.id] = DownloadState.Failed(e.message ?: "Download fehlgeschlagen")
+                downloads[model.id] = DownloadState.Failed(e.message ?: tr("Download fehlgeschlagen"))
             }
         }
     }
@@ -365,12 +375,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             ?.use { if (it.moveToFirst()) it.getString(0) else null } ?: "modell.litertlm"
         importName = name
         if (!name.endsWith(".litertlm")) {
-            importState = DownloadState.Failed("Das ist keine .litertlm-Datei.")
+            importState = DownloadState.Failed(tr("Das ist keine .litertlm-Datei."))
             return
         }
         val target = File(modelsDir(context), name)
         if (target.exists()) {
-            importState = DownloadState.Failed("Diese Datei liegt schon im Modell-Ordner.")
+            importState = DownloadState.Failed(tr("Diese Datei liegt schon im Modell-Ordner."))
             return
         }
         val total = context.contentResolver.query(uri, arrayOf(OpenableColumns.SIZE), null, null, null)
@@ -404,7 +414,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 refreshStorage()
             } catch (e: Exception) {
                 tmp.delete()
-                importState = DownloadState.Failed(e.message ?: "Import fehlgeschlagen")
+                importState = DownloadState.Failed(e.message ?: tr("Import fehlgeschlagen"))
             }
         }
     }
@@ -467,18 +477,18 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** Figur als Datei exportieren. Gibt eine Meldung zurück. */
     suspend fun exportCharacter(c: Character, uri: Uri): String = try {
         withContext(Dispatchers.IO) { repo.exportCharacter(c, uri) }
-        "${c.name} exportiert"
+        tr("%s exportiert", c.name)
     } catch (e: Exception) {
-        "Export fehlgeschlagen: ${e.message}"
+        tr("Export fehlgeschlagen: %s", e.message)
     }
 
     /** Figur aus einer Datei importieren. Gibt eine Meldung zurück. */
     suspend fun importCharacter(uri: Uri): String = try {
         val c = withContext(Dispatchers.IO) { repo.importCharacter(uri) }
         saveCharacter(c)
-        "${c.name} importiert"
+        tr("%s importiert", c.name)
     } catch (e: Exception) {
-        "Import fehlgeschlagen: ${e.message}"
+        tr("Import fehlgeschlagen: %s", e.message)
     }
 
     suspend fun importAvatar(uri: Uri, characterId: String): String? =
@@ -524,7 +534,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Hörprobe im Editor */
     fun previewVoice(c: Character) {
-        val sample = c.greeting.ifBlank { "Hallo, ich bin ${c.name.ifBlank { "deine neue Figur" }}." }
+        val sample = c.greeting.ifBlank { tr("Hallo, ich bin %s.", c.name.ifBlank { tr("deine neue Figur") }) }
         say("probe", sample, c)
     }
 
@@ -608,7 +618,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Öffnet den Chat mit einer Figur; ein gespeichertes Gespräch geht dort weiter, wo es aufgehört hat. */
-    fun openChat(c: Character) {
+    /** [replace] = im Tablet-Layout von einem Chat direkt zum nächsten wechseln (ohne Zurück-Schritt) */
+    fun openChat(c: Character, replace: Boolean = false) {
         stop()
         chatCharacter = c
         messages.clear()
@@ -623,7 +634,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         summary = saved?.summary.orEmpty()
         summarizedUpTo = saved?.summarizedUpTo ?: 0
         needsRebuild = true
-        navigate(Screen.Chat(c.id))
+        if (replace && screen is Screen.Chat) screen = Screen.Chat(c.id) else navigate(Screen.Chat(c.id))
         prepareConversation()
     }
 
@@ -666,11 +677,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val c = chatCharacter ?: return
         val model = chatModel
         if (useOllama && ollamaModelInfo == null) {
-            engineState = EngineState.Failed("Noch kein Ollama-Modell gewählt – in den Einstellungen \"Verbindung testen\" und ein Modell auswählen.")
+            engineState = EngineState.Failed(tr("Noch kein Ollama-Modell gewählt – in den Einstellungen \"Verbindung testen\" und ein Modell auswählen."))
             return
         }
         if (!useOllama && downloads[model.id] != DownloadState.Done) {
-            engineState = EngineState.Failed("${model.title} ist noch nicht heruntergeladen.")
+            engineState = EngineState.Failed(tr("%s ist noch nicht heruntergeladen.", model.title))
             return
         }
         chatJob?.cancel()
@@ -683,7 +694,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
-                engineState = EngineState.Failed(e.message ?: "Modell konnte nicht geladen werden")
+                engineState = EngineState.Failed(e.message ?: tr("Modell konnte nicht geladen werden"))
             } finally {
                 preparing = false
             }
@@ -699,7 +710,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 engine.load(model.fileName)
             } catch (e: Exception) {
-                throw IllegalStateException("Ollama nicht erreichbar – läuft der PC? (${e.message ?: e.javaClass.simpleName})", e)
+                throw IllegalStateException(tr("Ollama nicht erreichbar – läuft der PC? (%s)", e.message ?: e.javaClass.simpleName), e)
             }
         } else {
             // Merken, was gerade lädt – stürzt die App dabei ab, warnt sie beim nächsten Start
@@ -797,7 +808,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Ohne eigenen Text zum Bild fragt die App die Figur nach ihrer Meinung */
     private fun modelText(input: String, image: String?) =
-        if (input.isEmpty() && image != null) "Was sagst du zu diesem Bild?" else input
+        if (input.isEmpty() && image != null) tr("Was sagst du zu diesem Bild?") else input
 
     // ---------- Nachrichten bearbeiten und löschen ----------
 
@@ -889,7 +900,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 needsRebuild = true
                 if (index < messages.size) {
                     messages[index] = messages[index].withText(
-                        reply.toString().ifEmpty { "⚠ ${e.message ?: "Fehler beim Antworten"}" }
+                        reply.toString().ifEmpty { "⚠ ${e.message ?: tr("Fehler beim Antworten")}" }
                     )
                 }
             } finally {
@@ -952,9 +963,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
      * bisher geschriebenen Zeichen. Das Chat-Gespräch wird danach beim nächsten Senden neu aufgebaut.
      */
     suspend fun generateProfile(notes: String, base: Character, onProgress: (Int) -> Unit): Character {
-        val model = if (useOllama) ollamaModelInfo ?: error("Noch kein Ollama-Modell gewählt (Seite \"Einstellungen\").") else selectedModel
-        require(useOllama || downloads[model.id] == DownloadState.Done) { "${model.title} ist noch nicht heruntergeladen (Seite \"Einstellungen\")." }
-        check(!isGenerating) { "Es läuft gerade noch eine Antwort." }
+        val model = if (useOllama) ollamaModelInfo ?: error(tr("Noch kein Ollama-Modell gewählt (Seite \"Einstellungen\").")) else selectedModel
+        require(useOllama || downloads[model.id] == DownloadState.Done) { tr("%s ist noch nicht heruntergeladen (Seite \"Einstellungen\").", model.title) }
+        check(!isGenerating) { tr("Es läuft gerade noch eine Antwort.") }
         if (preparing) chatJob?.join()
         ensureModelLoaded(model)
         withContext(Dispatchers.IO) {
@@ -1004,7 +1015,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val total = (end - start) / 1000.0
         if (firstChunk == 0L) return "%.1f s".format(total)
         val first = (firstChunk - start) / 1000.0
-        return "erstes Wort nach %.1f s · %.1f s gesamt".format(first, total)
+        return tr("erstes Wort nach %s s · %s s gesamt", "%.1f".format(first), "%.1f".format(total))
     }
 
     private companion object {

@@ -1,5 +1,6 @@
 package de.davscha.characterfun.data
 
+import de.davscha.characterfun.i18n.I18n
 import org.json.JSONObject
 
 /**
@@ -30,7 +31,7 @@ object ProfileGenerator {
         }
         Wichtig zu "starter": Das sind drei kurze Sätze, die der NUTZER zur Figur sagt, um das Gespräch zu beginnen –
         also Fragen oder Bitten AN die Figur (z. B. "Erzähl mir von deinem letzten Abenteuer!"), nicht Sätze der Figur selbst.
-        Schreibe alles auf Deutsch.
+        Schreibe alles auf ${I18n.lang.promptName}.
     """.trimIndent()
 
     /** Übernimmt die Antwort in [base] (Id und Bild bleiben erhalten). Wirft eine Ausnahme, wenn kein JSON drin ist. */

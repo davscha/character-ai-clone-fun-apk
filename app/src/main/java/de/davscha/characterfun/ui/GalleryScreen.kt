@@ -1,5 +1,6 @@
 package de.davscha.characterfun.ui
 
+import de.davscha.characterfun.i18n.tr
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.FileOpen
@@ -96,7 +97,7 @@ fun GalleryScreen(vm: AppViewModel) {
             ExtendedFloatingActionButton(
                 onClick = { vm.navigate(Screen.Editor(null)) },
                 icon = { Icon(Icons.Default.Add, null) },
-                text = { Text("Figur erstellen") },
+                text = { Text(tr("Figur erstellen")) },
                 containerColor = MaterialTheme.colorScheme.primary,
             )
         },
@@ -108,13 +109,13 @@ fun GalleryScreen(vm: AppViewModel) {
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(Modifier.weight(1f)) {
-                    Text("Character Fun", fontSize = 26.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                    Text(tr("Character Fun"), fontSize = 26.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                     Text(modelLine(vm), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 OutlinedTextField(
                     value = query,
                     onValueChange = { query = it },
-                    placeholder = { Text("Figur suchen") },
+                    placeholder = { Text(tr("Figur suchen")) },
                     leadingIcon = { Icon(Icons.Default.Search, null) },
                     singleLine = true,
                     shape = RoundedCornerShape(24.dp),
@@ -127,12 +128,12 @@ fun GalleryScreen(vm: AppViewModel) {
                 TextButton(onClick = { importLauncher.launch(arrayOf("application/json", "application/octet-stream", "*/*")) }) {
                     Icon(Icons.Default.FileOpen, null)
                     Spacer(Modifier.width(6.dp))
-                    Text("Importieren")
+                    Text(tr("Importieren"))
                 }
                 TextButton(onClick = { vm.navigate(Screen.Models) }) {
                     Icon(Icons.Default.Settings, null)
                     Spacer(Modifier.width(6.dp))
-                    Text("Einstellungen")
+                    Text(tr("Einstellungen"))
                 }
             }
 
@@ -143,7 +144,7 @@ fun GalleryScreen(vm: AppViewModel) {
             // Weiter chatten: die letzten Gespräche
             if (vm.recentChats.isNotEmpty() && query.isBlank()) {
                 Text(
-                    "Weiter chatten",
+                    tr("Weiter chatten"),
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.padding(start = 24.dp, top = 4.dp, bottom = 8.dp),
                 )
@@ -163,10 +164,10 @@ fun GalleryScreen(vm: AppViewModel) {
                 contentPadding = PaddingValues(horizontal = 24.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                item { FilterChip(selected = filter == null, onClick = { filter = null }, label = { Text("Alle") }) }
-                item { FilterChip(selected = filter == "eigene", onClick = { filter = "eigene" }, label = { Text("Eigene") }) }
+                item { FilterChip(selected = filter == null, onClick = { filter = null }, label = { Text(tr("Alle")) }) }
+                item { FilterChip(selected = filter == "eigene", onClick = { filter = "eigene" }, label = { Text(tr("Eigene")) }) }
                 items(Category.entries.filter { cat -> vm.characters.any { it.category == cat } }) { cat ->
-                    FilterChip(selected = filter == cat.name, onClick = { filter = cat.name }, label = { Text(cat.label) })
+                    FilterChip(selected = filter == cat.name, onClick = { filter = cat.name }, label = { Text(tr(cat.label)) })
                 }
             }
 
@@ -174,7 +175,7 @@ fun GalleryScreen(vm: AppViewModel) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text(
                         if (filter == "eigene" && query.isBlank()) "Noch keine eigenen Figuren – tippe auf \"Figur erstellen\"."
-                        else "Keine Figur gefunden.",
+                        else tr("Keine Figur gefunden."),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center,
                     )
@@ -195,10 +196,10 @@ fun GalleryScreen(vm: AppViewModel) {
 }
 
 private fun modelLine(vm: AppViewModel): String = when (val s = vm.engineState) {
-    is EngineState.Ready -> "${s.model.title} bereit · ${s.accelerator.label}"
-    is EngineState.Loading -> "${s.modelTitle} wird geladen …"
-    else -> if (vm.downloads[vm.selectedModel.id] == DownloadState.Done) "Modell: ${vm.selectedModel.title}"
-    else "Noch kein Modell – oben rechts unter \"Einstellungen\" herunterladen"
+    is EngineState.Ready -> tr("%s bereit · %s", s.model.title, tr(s.accelerator.label))
+    is EngineState.Loading -> tr("%s wird geladen …", s.modelTitle)
+    else -> if (vm.downloads[vm.selectedModel.id] == DownloadState.Done) tr("Modell: %s", vm.selectedModel.title)
+    else tr("Noch kein Modell – oben rechts unter \"Einstellungen\" herunterladen")
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -214,14 +215,14 @@ private fun CharacterCard(vm: AppViewModel, c: Character) {
     if (confirmDelete) {
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
-            title = { Text("${c.name} löschen?") },
-            text = { Text("Die Figur und das Gespräch mit ihr sind danach weg.") },
+            title = { Text(tr("%s löschen?", c.name)) },
+            text = { Text(tr("Die Figur und das Gespräch mit ihr sind danach weg.")) },
             confirmButton = {
                 TextButton(onClick = { confirmDelete = false; vm.deleteCharacter(c.id) }) {
-                    Text("Löschen", color = MaterialTheme.colorScheme.error)
+                    Text(tr("Löschen"), color = MaterialTheme.colorScheme.error)
                 }
             },
-            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Abbrechen") } },
+            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text(tr("Abbrechen")) } },
         )
     }
     Card(
@@ -254,7 +255,7 @@ private fun CharacterCard(vm: AppViewModel, c: Character) {
                 )
                 Spacer(Modifier.weight(1f))
                 Text(
-                    if (c.builtIn) c.category.label else "${c.category.label} · eigene",
+                    if (c.builtIn) tr(c.category.label) else tr("%s · eigene", tr(c.category.label)),
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.primary,
                 )
@@ -265,12 +266,12 @@ private fun CharacterCard(vm: AppViewModel, c: Character) {
                 }
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                     DropdownMenuItem(
-                        text = { Text("Bearbeiten") },
+                        text = { Text(tr("Bearbeiten")) },
                         leadingIcon = { Icon(Icons.Default.Edit, null) },
                         onClick = { menuOpen = false; vm.navigate(Screen.Editor(c.id)) },
                     )
                     DropdownMenuItem(
-                        text = { Text("Exportieren") },
+                        text = { Text(tr("Exportieren")) },
                         leadingIcon = { Icon(Icons.Default.Share, null) },
                         onClick = {
                             menuOpen = false
@@ -278,7 +279,7 @@ private fun CharacterCard(vm: AppViewModel, c: Character) {
                         },
                     )
                     DropdownMenuItem(
-                        text = { Text("Löschen", color = MaterialTheme.colorScheme.error) },
+                        text = { Text(tr("Löschen"), color = MaterialTheme.colorScheme.error) },
                         leadingIcon = { Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error) },
                         onClick = { menuOpen = false; confirmDelete = true },
                     )

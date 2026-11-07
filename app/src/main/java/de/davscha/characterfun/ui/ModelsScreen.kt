@@ -1,5 +1,8 @@
 package de.davscha.characterfun.ui
 
+import de.davscha.characterfun.i18n.AppLanguage
+import de.davscha.characterfun.i18n.I18n
+import de.davscha.characterfun.i18n.tr
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
@@ -79,7 +82,7 @@ fun ModelsScreen(vm: AppViewModel) {
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = { vm.back() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Zurück") }
-            Text("Einstellungen", fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
+            Text(tr("Einstellungen"), fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
         }
         Column(
             Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp),
@@ -88,27 +91,39 @@ fun ModelsScreen(vm: AppViewModel) {
             Column(Modifier.widthIn(max = 640.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 vm.crashNotice?.let { CrashNotice(it) { vm.dismissCrashNotice() } }
 
-                SectionTitle("Über dich")
+                SectionTitle(tr("Sprache der Oberfläche"))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    AppLanguage.entries.forEach { l ->
+                        FilterChip(selected = I18n.lang == l, onClick = { vm.changeLanguage(l) }, label = { Text(l.label) })
+                    }
+                }
+                Text(
+                    tr("Die Figuren antworten ebenfalls in dieser Sprache. Die mitgelieferten Beispiel-Figuren sind auf Deutsch geschrieben."),
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+
+                SectionTitle(tr("Über dich"))
                 OutlinedTextField(
                     value = vm.aboutUser,
                     onValueChange = { vm.changeAboutUser(it) },
-                    placeholder = { Text("z. B. Ich heiße David, wohne in Brandenburg, mag Wrestling und Tennis.") },
-                    supportingText = { Text("Das wissen alle Figuren über dich. Gilt ab der nächsten Nachricht.") },
+                    placeholder = { Text(tr("z. B. Ich heiße David, wohne in Brandenburg, mag Wrestling und Tennis.")) },
+                    supportingText = { Text(tr("Das wissen alle Figuren über dich. Gilt ab der nächsten Nachricht.")) },
                     minLines = 2,
                     modifier = Modifier.fillMaxWidth(),
                 )
 
-                SectionTitle("KI-Quelle")
+                SectionTitle(tr("KI-Quelle"))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilterChip(
                         selected = !vm.useOllama,
                         onClick = { vm.setSource(false) },
-                        label = { Text("Intern – auf diesem Gerät") },
+                        label = { Text(tr("Intern – auf diesem Gerät")) },
                     )
                     FilterChip(
                         selected = vm.useOllama,
                         onClick = { vm.setSource(true) },
-                        label = { Text("Lokal – Ollama im Netzwerk") },
+                        label = { Text(tr("Lokal – Ollama im Netzwerk")) },
                     )
                 }
 
@@ -116,16 +131,14 @@ fun ModelsScreen(vm: AppViewModel) {
                     OllamaSettings(vm)
                     EngineStatus(vm)
                 } else {
-                    SectionTitle("Modelle")
+                    SectionTitle(tr("Modelle"))
                     StorageHint(vm)
                     vm.allModels.filter { it.url.isNotEmpty() }.forEach { model -> ModelCard(vm, model) }
                     EngineStatus(vm)
 
-                    SectionTitle("Eigene Modelle")
+                    SectionTitle(tr("Eigene Modelle"))
                     Text(
-                        "Jede .litertlm-Datei im Ordner CharacterFun/Modelle erscheint hier – zum Beispiel " +
-                            "Gemma 4 12B von Hugging Face. Achtung: Modelle, die nicht für Android gedacht sind, " +
-                            "können die App beim Laden abstürzen lassen.",
+                        tr("Jede .litertlm-Datei im Ordner CharacterFun/Modelle erscheint hier – zum Beispiel Gemma 4 12B von Hugging Face. Achtung: Modelle, die nicht für Android gedacht sind, können die App beim Laden abstürzen lassen."),
                         fontSize = 13.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -133,7 +146,7 @@ fun ModelsScreen(vm: AppViewModel) {
                     ImportBox(vm)
                 }
 
-                SectionTitle("Kreativität")
+                SectionTitle(tr("Kreativität"))
                 Text(
                     "%.1f – niedrig = vorhersehbar, hoch = verrückter. Gilt ab dem nächsten Gespräch.".format(vm.temperature),
                     fontSize = 13.sp,
@@ -158,7 +171,7 @@ private fun OllamaSettings(vm: AppViewModel) {
         OutlinedTextField(
             value = vm.ollamaHost,
             onValueChange = { vm.changeOllamaHost(it) },
-            label = { Text("IP-Adresse des PCs") },
+            label = { Text(tr("IP-Adresse des PCs")) },
             placeholder = { Text("192.168.178.20") },
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
@@ -170,24 +183,24 @@ private fun OllamaSettings(vm: AppViewModel) {
                 portText = t.filter { it.isDigit() }.take(5)
                 portText.toIntOrNull()?.takeIf { it in 1..65535 }?.let { vm.changeOllamaPort(it) }
             },
-            label = { Text("Port") },
+            label = { Text(tr("Port")) },
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             modifier = Modifier.width(120.dp),
         )
     }
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Button(onClick = { vm.testOllama() }, enabled = vm.ollamaStatus !is OllamaStatus.Testing) { Text("Verbindung testen") }
+        Button(onClick = { vm.testOllama() }, enabled = vm.ollamaStatus !is OllamaStatus.Testing) { Text(tr("Verbindung testen")) }
         Spacer(Modifier.width(12.dp))
         when (val st = vm.ollamaStatus) {
-            OllamaStatus.Untested -> Text("Noch nicht getestet", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            OllamaStatus.Untested -> Text(tr("Noch nicht getestet"), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             OllamaStatus.Testing -> {
                 CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                 Spacer(Modifier.width(8.dp))
-                Text("Prüfe …", fontSize = 13.sp)
+                Text(tr("Prüfe …"), fontSize = 13.sp)
             }
             is OllamaStatus.Ok -> Text(
-                "Verbunden · Ollama ${st.version} · ${st.models.size} Modelle",
+                tr("Verbunden · Ollama %s · %s Modelle", st.version, st.models.size),
                 fontSize = 13.sp,
                 color = MaterialTheme.colorScheme.secondary,
             )
@@ -198,19 +211,19 @@ private fun OllamaSettings(vm: AppViewModel) {
         Text(it.message, fontSize = 13.sp, color = MaterialTheme.colorScheme.error)
     }
     Text(
-        "Tipp: Ollama muss im Netzwerk erreichbar sein – auf dem PC die Umgebungsvariable OLLAMA_HOST=0.0.0.0 setzen und Ollama neu starten.",
+        tr("Tipp: Ollama muss im Netzwerk erreichbar sein – auf dem PC die Umgebungsvariable OLLAMA_HOST=0.0.0.0 setzen und Ollama neu starten."),
         fontSize = 12.sp,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
 
     (vm.ollamaStatus as? OllamaStatus.Ok)?.let { ok ->
         if (ok.models.isEmpty()) {
-            Text("Auf dem PC ist noch kein Modell installiert (z. B. ollama pull gemma4:e4b).", fontSize = 13.sp)
+            Text(tr("Auf dem PC ist noch kein Modell installiert (z. B. ollama pull gemma4:e4b)."), fontSize = 13.sp)
         }
         if (ok.models.isNotEmpty()) OllamaModelPicker(vm, ok.models)
     } ?: run {
         if (vm.ollamaModel.isNotBlank()) {
-            Text("Gewähltes Modell: ${vm.ollamaModel}", fontSize = 13.sp)
+            Text(tr("Gewähltes Modell: %s", vm.ollamaModel), fontSize = 13.sp)
         }
     }
 }
@@ -223,13 +236,13 @@ private fun OllamaModelPicker(vm: AppViewModel, models: List<OllamaModel>) {
     val current = models.firstOrNull { it.name == vm.ollamaModel }
     ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
         OutlinedTextField(
-            value = current?.name ?: "Modell wählen",
+            value = current?.name ?: tr("Modell wählen"),
             onValueChange = {},
             readOnly = true,
-            label = { Text("Ollama-Modell") },
+            label = { Text(tr("Ollama-Modell")) },
             supportingText = {
                 current?.let {
-                    Text("%.1f GB · %s".format(it.sizeBytes / 1e9, if (it.vision) "kann Bilder ✓" else "keine Bilder ✗"))
+                    Text(tr("%.1f GB · %s").format(it.sizeBytes / 1e9, if (it.vision) tr("kann Bilder ✓") else tr("keine Bilder ✗")))
                 }
             },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
@@ -243,11 +256,11 @@ private fun OllamaModelPicker(vm: AppViewModel, models: List<OllamaModel>) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
                                 Text(m.name, fontWeight = if (m.name == vm.ollamaModel) FontWeight.SemiBold else FontWeight.Normal)
-                                Text("%.1f GB".format(m.sizeBytes / 1e9), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(tr("%.1f GB").format(m.sizeBytes / 1e9), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                             Spacer(Modifier.width(12.dp))
                             Text(
-                                if (m.vision) "Bilder ✓" else "Bilder ✗",
+                                if (m.vision) tr("Bilder ✓") else tr("Bilder ✗"),
                                 fontSize = 12.sp,
                                 color = if (m.vision) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -276,7 +289,7 @@ fun CrashNotice(text: String, onDismiss: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(text, fontSize = 13.sp, modifier = Modifier.weight(1f))
-        TextButton(onClick = onDismiss) { Text("OK") }
+        TextButton(onClick = onDismiss) { Text(tr("OK")) }
     }
 }
 
@@ -289,7 +302,7 @@ private fun ImportBox(vm: AppViewModel) {
     when (val st = vm.importState) {
         is DownloadState.Moving -> Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             val fraction = if (st.total > 0) st.copied.toFloat() / st.total else 0f
-            Text("${vm.importName} wird kopiert …", fontSize = 13.sp)
+            Text(tr("%s wird kopiert …", vm.importName), fontSize = 13.sp)
             LinearProgressIndicator(progress = { fraction }, modifier = Modifier.fillMaxWidth())
             Text(
                 "%.2f / %.2f GB".format(st.copied / 1e9, st.total / 1e9),
@@ -299,10 +312,10 @@ private fun ImportBox(vm: AppViewModel) {
         }
         is DownloadState.Failed -> Row(verticalAlignment = Alignment.CenterVertically) {
             Text("${vm.importName}: ${st.message}", color = MaterialTheme.colorScheme.error, fontSize = 13.sp, modifier = Modifier.weight(1f))
-            TextButton(onClick = { vm.dismissImportError() }) { Text("OK") }
+            TextButton(onClick = { vm.dismissImportError() }) { Text(tr("OK")) }
         }
         else -> OutlinedButton(onClick = { pick.launch(arrayOf("*/*")) }, modifier = Modifier.fillMaxWidth()) {
-            Text(".litertlm-Datei wählen")
+            Text(tr(".litertlm-Datei wählen"))
         }
     }
 }
@@ -313,7 +326,7 @@ private fun StorageHint(vm: AppViewModel) {
     val context = LocalContext.current
     if (vm.sharedStorage) {
         Text(
-            "Gespeichert in CharacterFun/Modelle – bleibt auch bei Neuinstallation erhalten.",
+            tr("Gespeichert in CharacterFun/Modelle – bleibt auch bei Neuinstallation erhalten."),
             fontSize = 12.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -327,10 +340,9 @@ private fun StorageHint(vm: AppViewModel) {
             .padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Text("Modelle dauerhaft speichern", fontWeight = FontWeight.SemiBold)
+        Text(tr("Modelle dauerhaft speichern"), fontWeight = FontWeight.SemiBold)
         Text(
-            "Ohne Erlaubnis liegen die Modelle in der App und sind nach einer Neuinstallation weg. " +
-                "Mit \"Zugriff auf alle Dateien\" landen sie im Ordner CharacterFun/Modelle und bleiben.",
+            tr("Ohne Erlaubnis liegen die Modelle in der App und sind nach einer Neuinstallation weg. Mit \"Zugriff auf alle Dateien\" landen sie im Ordner CharacterFun/Modelle und bleiben."),
             fontSize = 12.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -341,7 +353,7 @@ private fun StorageHint(vm: AppViewModel) {
                     Uri.parse("package:${context.packageName}"),
                 )
             )
-        }) { Text("Erlaubnis erteilen") }
+        }) { Text(tr("Erlaubnis erteilen")) }
     }
 }
 
@@ -372,7 +384,7 @@ private fun ModelCard(vm: AppViewModel, model: ModelInfo) {
             Column(Modifier.weight(1f)) {
                 Text(model.title, fontWeight = FontWeight.SemiBold)
                 Text(
-                    "${model.description} · %.1f GB".format(model.sizeBytes / 1e9),
+                    "${tr(model.description)} · %.1f GB".format(model.sizeBytes / 1e9),
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -384,10 +396,10 @@ private fun ModelCard(vm: AppViewModel, model: ModelInfo) {
             }
         }
         when (state) {
-            DownloadState.Missing -> TextButton(onClick = { vm.download(model) }) { Text("Herunterladen") }
+            DownloadState.Missing -> TextButton(onClick = { vm.download(model) }) { Text(tr("Herunterladen")) }
             is DownloadState.Failed -> {
                 Text(state.message, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
-                TextButton(onClick = { vm.download(model) }) { Text("Weiter herunterladen") }
+                TextButton(onClick = { vm.download(model) }) { Text(tr("Weiter herunterladen")) }
             }
             is DownloadState.Running -> {
                 val fraction = if (state.total > 0) state.downloaded.toFloat() / state.total else 0f
@@ -399,15 +411,15 @@ private fun ModelCard(vm: AppViewModel, model: ModelInfo) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.weight(1f),
                     )
-                    TextButton(onClick = { vm.cancelDownload(model) }) { Text("Pause") }
+                    TextButton(onClick = { vm.cancelDownload(model) }) { Text(tr("Pause")) }
                 }
             }
             is DownloadState.Moving -> {
                 val fraction = if (state.total > 0) state.copied.toFloat() / state.total else 0f
                 LinearProgressIndicator(progress = { fraction }, modifier = Modifier.fillMaxWidth())
-                Text("Wird in den dauerhaften Ordner verschoben …", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(tr("Wird in den dauerhaften Ordner verschoben …"), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            DownloadState.Done -> Text("Bereit", fontSize = 12.sp, color = MaterialTheme.colorScheme.secondary)
+            DownloadState.Done -> Text(tr("Bereit"), fontSize = 12.sp, color = MaterialTheme.colorScheme.secondary)
         }
     }
 }
@@ -417,9 +429,9 @@ private fun EngineStatus(vm: AppViewModel) {
     val downloaded = vm.downloads[vm.selectedModel.id] is DownloadState.Done
     when (val s = vm.engineState) {
         EngineState.Idle -> Text(
-            if (vm.useOllama) "Das Ollama-Modell wird geladen, sobald du einen Chat öffnest."
-            else if (downloaded) "${vm.selectedModel.title} wird geladen, sobald du einen Chat öffnest."
-            else "Lade ${vm.selectedModel.title} herunter, um loszulegen.",
+            if (vm.useOllama) tr("Das Ollama-Modell wird geladen, sobald du einen Chat öffnest.")
+            else if (downloaded) tr("%s wird geladen, sobald du einen Chat öffnest.", vm.selectedModel.title)
+            else tr("Lade %s herunter, um loszulegen.", vm.selectedModel.title),
             fontSize = 13.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -427,17 +439,17 @@ private fun EngineStatus(vm: AppViewModel) {
         is EngineState.Loading -> Row(verticalAlignment = Alignment.CenterVertically) {
             CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
             Spacer(Modifier.width(10.dp))
-            Text("${s.modelTitle} wird geladen …", fontSize = 13.sp)
+            Text(tr("%s wird geladen …", s.modelTitle), fontSize = 13.sp)
         }
 
         is EngineState.Ready -> Text(
-            "${s.model.title} läuft auf dem ${s.accelerator.label} · geladen in %.1f s".format(s.loadSeconds),
+            tr("%s läuft auf: %s · geladen in %s s", s.model.title, tr(s.accelerator.label), "%.1f".format(s.loadSeconds)),
             fontSize = 13.sp,
             color = MaterialTheme.colorScheme.secondary,
         )
 
         is EngineState.Failed -> Column {
-            Text("Laden fehlgeschlagen: ${s.message}", color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
+            Text(tr("Laden fehlgeschlagen: %s", s.message), color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
 
         }
     }

@@ -19,9 +19,9 @@ Stand: 6. November 2026. Abhaken mit `[x]`, sobald etwas fertig ist.
 ## Größere Brocken
 
 - [ ] **9. Rooms (Gruppenchat)** – mehrere Figuren in einem Chat, die abwechselnd antworten
-- [ ] **10. Tablet-Layout** – Chatliste links, Chat rechts
+- [x] **10. Tablet-Layout** – Chatliste links, Chat rechts
 - [x] **11. Ollama-Anbindung** – KI-Quelle Intern oder Lokal (Ollama), IP/Port, Verbindungstest, Modellauswahl mit Bild-Check
-- [ ] **12. Sprache der Oberfläche** – Deutsch, Englisch, Spanisch, Französisch, in den Einstellungen wählbar
+- [x] **12. Sprache der Oberfläche** – Deutsch, Englisch, Spanisch, Französisch, in den Einstellungen wählbar
 
 ## Erledigt
 

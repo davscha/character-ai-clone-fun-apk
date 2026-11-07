@@ -1,5 +1,6 @@
 package de.davscha.characterfun.ui
 
+import de.davscha.characterfun.i18n.tr
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenuItem
@@ -95,7 +96,7 @@ fun EditorScreen(vm: AppViewModel, characterId: String?) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = { vm.back() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Zurück") }
             Text(
-                if (characterId == null) "Neue Figur" else "Figur bearbeiten",
+                if (characterId == null) tr("Neue Figur") else tr("Figur bearbeiten"),
                 fontSize = 20.sp,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.weight(1f),
@@ -106,7 +107,7 @@ fun EditorScreen(vm: AppViewModel, characterId: String?) {
                 }
             }
             Button(onClick = { save() }, enabled = c.name.isNotBlank(), modifier = Modifier.padding(end = 16.dp)) {
-                Text("Speichern")
+                Text(tr("Speichern"))
             }
         }
 
@@ -133,66 +134,66 @@ fun EditorScreen(vm: AppViewModel, characterId: String?) {
                         }) {
                             Icon(Icons.Default.Image, null)
                             Spacer(Modifier.width(8.dp))
-                            Text("Bild wählen")
+                            Text(tr("Bild wählen"))
                         }
                         if (c.avatarFile.isNotEmpty()) {
-                            TextButton(onClick = { c = c.copy(avatarFile = "") }) { Text("Bild entfernen") }
+                            TextButton(onClick = { c = c.copy(avatarFile = "") }) { Text(tr("Bild entfernen")) }
                         }
                     }
                     Spacer(Modifier.width(20.dp))
                     OutlinedTextField(
                         value = c.emoji,
                         onValueChange = { c = c.copy(emoji = it.take(8)) },
-                        label = { Text("oder Emoji") },
+                        label = { Text(tr("oder Emoji")) },
                         singleLine = true,
                         modifier = Modifier.width(140.dp),
                     )
                 }
 
-                Field("Name", c.name, "z. B. Kapitän Kraken") { c = c.copy(name = it) }
+                Field(tr("Name"), c.name, tr("z. B. Kapitän Kraken")) { c = c.copy(name = it) }
 
-                Text("Kategorie", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(tr("Kategorie"), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Category.entries.forEach { cat ->
-                        FilterChip(selected = c.category == cat, onClick = { c = c.copy(category = cat) }, label = { Text(cat.label) })
+                        FilterChip(selected = c.category == cat, onClick = { c = c.copy(category = cat) }, label = { Text(tr(cat.label)) })
                     }
                 }
 
                 Field(
-                    "Kurzbeschreibung", c.shortDescription,
-                    "Ein Satz für die Karte, z. B. \"Angeberischer Tintenfisch-Pirat\"",
+                    tr("Kurzbeschreibung"), c.shortDescription,
+                    tr("Ein Satz für die Karte, z. B. \"Angeberischer Tintenfisch-Pirat\""),
                 ) { c = c.copy(shortDescription = it) }
 
                 Field(
-                    "Begrüßung", c.greeting,
-                    "Der erste Satz der Figur im Chat", minLines = 2,
+                    tr("Begrüßung"), c.greeting,
+                    tr("Der erste Satz der Figur im Chat"), minLines = 2,
                 ) { c = c.copy(greeting = it) }
 
                 Field(
-                    "Startszene (optional)", c.scenario,
-                    "Wo und wie beginnt das Gespräch? z. B. \"Nachts in einer verrauchten Hafenkneipe\"", minLines = 2,
+                    tr("Startszene (optional)"), c.scenario,
+                    tr("Wo und wie beginnt das Gespräch? z. B. \"Nachts in einer verrauchten Hafenkneipe\""), minLines = 2,
                 ) { c = c.copy(scenario = it) }
 
                 Field(
-                    "Definition (Persönlichkeit)", c.definition,
-                    "Wie denkt, redet und verhält sich die Figur? Kurze, klare Sätze funktionieren am besten.",
+                    tr("Definition (Persönlichkeit)"), c.definition,
+                    tr("Wie denkt, redet und verhält sich die Figur? Kurze, klare Sätze funktionieren am besten."),
                     minLines = 5,
                 ) { c = c.copy(definition = it) }
 
                 Field(
-                    "Hintergrund (optional)", c.longDescription,
-                    "Aussehen, Vorgeschichte, Umgebung …", minLines = 3,
+                    tr("Hintergrund (optional)"), c.longDescription,
+                    tr("Aussehen, Vorgeschichte, Umgebung …"), minLines = 3,
                 ) { c = c.copy(longDescription = it) }
 
-                Text("Antwortlänge", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(tr("Antwortlänge"), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     ReplyLength.entries.forEach { len ->
-                        FilterChip(selected = c.replyLength == len, onClick = { c = c.copy(replyLength = len) }, label = { Text(len.label) })
+                        FilterChip(selected = c.replyLength == len, onClick = { c = c.copy(replyLength = len) }, label = { Text(tr(len.label)) })
                     }
                 }
 
                 Text(
-                    if (vm.useOllama) "Lieblingsmodell (gilt nur im Modus \"Intern\" – gerade ist Ollama aktiv)" else "Lieblingsmodell",
+                    if (vm.useOllama) tr("Lieblingsmodell (gilt nur im Modus \"Intern\" – gerade ist Ollama aktiv)") else tr("Lieblingsmodell"),
                     fontSize = 13.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -200,26 +201,26 @@ fun EditorScreen(vm: AppViewModel, characterId: String?) {
                     FilterChip(
                         selected = c.preferredModelId.isEmpty(),
                         onClick = { c = c.copy(preferredModelId = "") },
-                        label = { Text("Wie in den Einstellungen") },
+                        label = { Text(tr("Wie in den Einstellungen")) },
                     )
                     ModelCatalog.all.forEach { m ->
                         val ready = vm.downloads[m.id] == DownloadState.Done
                         FilterChip(
                             selected = c.preferredModelId == m.id,
                             onClick = { c = c.copy(preferredModelId = m.id) },
-                            label = { Text(if (ready) m.title else "${m.title} (nicht geladen)") },
+                            label = { Text(if (ready) m.title else tr("%s (nicht geladen)", m.title)) },
                         )
                     }
                 }
 
                 VoiceSection(vm, c) { c = it }
 
-                Text("Gesprächsstarter (optional)", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(tr("Gesprächsstarter (optional)"), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 starters.forEachIndexed { i, s ->
                     OutlinedTextField(
                         value = s,
                         onValueChange = { v -> starters = starters.toMutableList().also { it[i] = v } },
-                        placeholder = { Text("Vorschlag ${i + 1}") },
+                        placeholder = { Text(tr("Vorschlag %s", i + 1)) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                     )
@@ -232,16 +233,16 @@ fun EditorScreen(vm: AppViewModel, characterId: String?) {
     if (confirmDelete) {
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
-            title = { Text("${c.name.ifBlank { "Figur" }} löschen?") },
-            text = { Text("Die Figur ist danach weg.") },
+            title = { Text(tr("%s löschen?", c.name.ifBlank { tr("Figur") })) },
+            text = { Text(tr("Die Figur ist danach weg.")) },
             confirmButton = {
                 TextButton(onClick = {
                     confirmDelete = false
                     vm.deleteCharacter(c.id)
                     vm.back()
-                }) { Text("Löschen", color = MaterialTheme.colorScheme.error) }
+                }) { Text(tr("Löschen"), color = MaterialTheme.colorScheme.error) }
             },
-            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Abbrechen") } },
+            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text(tr("Abbrechen")) } },
         )
     }
 }
@@ -279,18 +280,17 @@ private fun AiBox(vm: AppViewModel, current: Character, onGenerated: (Character)
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Default.AutoAwesome, null, tint = MaterialTheme.colorScheme.primary)
             Spacer(Modifier.width(8.dp))
-            Text("Mit KI erstellen", fontWeight = FontWeight.SemiBold)
+            Text(tr("Mit KI erstellen"), fontWeight = FontWeight.SemiBold)
         }
         Text(
-            "Ein paar Stichpunkte genügen – die KI schreibt Name, Begrüßung, Persönlichkeit und Gesprächsstarter. " +
-                "Vorhandene Felder werden überschrieben.",
+            tr("Ein paar Stichpunkte genügen – die KI schreibt Name, Begrüßung, Persönlichkeit und Gesprächsstarter. Vorhandene Felder werden überschrieben."),
             fontSize = 13.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         OutlinedTextField(
             value = notes,
             onValueChange = { notes = it },
-            placeholder = { Text("z. B. mürrischer Zwerg, Schmied, liebt Bier und Rätsel, berlinert") },
+            placeholder = { Text(tr("z. B. mürrischer Zwerg, Schmied, liebt Bier und Rätsel, berlinert")) },
             enabled = !busy,
             minLines = 2,
             modifier = Modifier.fillMaxWidth(),
@@ -307,23 +307,23 @@ private fun AiBox(vm: AppViewModel, current: Character, onGenerated: (Character)
                         } catch (e: kotlinx.coroutines.CancellationException) {
                             throw e
                         } catch (e: Exception) {
-                            error = e.message ?: "Das hat nicht geklappt."
+                            error = e.message ?: tr("Das hat nicht geklappt.")
                         } finally {
                             busy = false
                         }
                     }
                 },
                 enabled = notes.isNotBlank() && !busy,
-            ) { Text(if (current.definition.isBlank()) "Profil erstellen" else "Neu erstellen") }
+            ) { Text(if (current.definition.isBlank()) tr("Profil erstellen") else tr("Neu erstellen")) }
             Spacer(Modifier.width(12.dp))
             if (busy) {
                 CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
                 Spacer(Modifier.width(10.dp))
                 Text(
                     when {
-                        vm.engineState is EngineState.Loading -> "Modell wird geladen …"
-                        progress == 0 -> "Die KI denkt nach …"
-                        else -> "Die KI schreibt … ($progress Zeichen)"
+                        vm.engineState is EngineState.Loading -> tr("Modell wird geladen …")
+                        progress == 0 -> tr("Die KI denkt nach …")
+                        else -> tr("Die KI schreibt … (%s Zeichen)", progress)
                     },
                     fontSize = 13.sp,
                 )
@@ -342,20 +342,20 @@ private fun VoiceSection(vm: AppViewModel, c: Character, onChange: (Character) -
     val shown = vm.voices.filter { allLanguages || it.isGerman }
     val current = vm.voices.firstOrNull { it.name == c.voiceName }
 
-    Text("Stimme beim Vorlesen", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Text(tr("Stimme beim Vorlesen"), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
     ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
         OutlinedTextField(
-            value = current?.label ?: "Standardstimme (Deutsch)",
+            value = current?.label ?: tr("Standardstimme"),
             onValueChange = {},
             readOnly = true,
-            label = { Text("Stimme") },
+            label = { Text(tr("Stimme")) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
             singleLine = true,
             modifier = Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryNotEditable),
         )
         ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             DropdownMenuItem(
-                text = { Text("Standardstimme (Deutsch)") },
+                text = { Text(tr("Standardstimme")) },
                 onClick = { onChange(c.copy(voiceName = "")); expanded = false },
             )
             shown.forEach { v ->
@@ -374,44 +374,44 @@ private fun VoiceSection(vm: AppViewModel, c: Character, onChange: (Character) -
     Row(verticalAlignment = Alignment.CenterVertically) {
         Checkbox(checked = allLanguages, onCheckedChange = { allLanguages = it })
         Text(
-            "Auch Stimmen anderer Sprachen zeigen – liest Deutsch mit Akzent, z. B. eine englische oder französische Stimme",
+            tr("Auch Stimmen anderer Sprachen zeigen – liest mit Akzent vor, z. B. eine englische oder französische Stimme"),
             fontSize = 12.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
     if (vm.voices.none { it.isGerman }) {
         Text(
-            "Keine deutsche Stimme gefunden – in den Android-Einstellungen unter \"Text-in-Sprache-Ausgabe\" Stimmdaten für Deutsch installieren.",
+            tr("Keine passende Stimme gefunden – in den Android-Einstellungen unter \"Text-in-Sprache-Ausgabe\" Stimmdaten installieren."),
             fontSize = 12.sp,
             color = MaterialTheme.colorScheme.error,
         )
     }
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Text("Tonhöhe", fontSize = 13.sp, modifier = Modifier.width(80.dp))
+        Text(tr("Tonhöhe"), fontSize = 13.sp, modifier = Modifier.width(80.dp))
         Slider(
             value = c.voicePitch,
             onValueChange = { onChange(c.copy(voicePitch = (it * 20).toInt() / 20f)) },
             valueRange = 0.25f..3.0f,
             modifier = Modifier.weight(1f),
         )
-        Text("%.2f".format(c.voicePitch), fontSize = 13.sp, modifier = Modifier.width(48.dp))
+        Text(tr("%.2f").format(c.voicePitch), fontSize = 13.sp, modifier = Modifier.width(48.dp))
     }
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Text("Tempo", fontSize = 13.sp, modifier = Modifier.width(80.dp))
+        Text(tr("Tempo"), fontSize = 13.sp, modifier = Modifier.width(80.dp))
         Slider(
             value = c.voiceRate,
             onValueChange = { onChange(c.copy(voiceRate = (it * 20).toInt() / 20f)) },
             valueRange = 0.25f..3.0f,
             modifier = Modifier.weight(1f),
         )
-        Text("%.2f".format(c.voiceRate), fontSize = 13.sp, modifier = Modifier.width(48.dp))
+        Text(tr("%.2f").format(c.voiceRate), fontSize = 13.sp, modifier = Modifier.width(48.dp))
     }
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedButton(onClick = { vm.previewVoice(c) }) {
             Icon(Icons.AutoMirrored.Filled.VolumeUp, null)
             Spacer(Modifier.width(8.dp))
-            Text("Probe hören")
+            Text(tr("Probe hören"))
         }
-        TextButton(onClick = { onChange(c.copy(voicePitch = 1f, voiceRate = 1f)) }) { Text("Tonhöhe und Tempo zurücksetzen") }
+        TextButton(onClick = { onChange(c.copy(voicePitch = 1f, voiceRate = 1f)) }) { Text(tr("Tonhöhe und Tempo zurücksetzen")) }
     }
 }

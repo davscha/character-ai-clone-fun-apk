@@ -1,5 +1,7 @@
 package de.davscha.characterfun.ui
 
+import de.davscha.characterfun.i18n.I18n
+import de.davscha.characterfun.i18n.tr
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.ui.text.input.TextFieldValue
@@ -112,12 +114,12 @@ fun ChatScreen(vm: AppViewModel) {
         val fromUser = vm.messages[editIndex].fromUser
         AlertDialog(
             onDismissRequest = { editIndex = -1 },
-            title = { Text("Nachricht bearbeiten") },
+            title = { Text(tr("Nachricht bearbeiten")) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (fromUser && editIndex < vm.messages.lastIndex) {
                         Text(
-                            "Alles nach dieser Nachricht fällt weg, ${c.name} antwortet neu.",
+                            tr("Alles nach dieser Nachricht fällt weg, %s antwortet neu.", c.name),
                             fontSize = 13.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -129,20 +131,20 @@ fun ChatScreen(vm: AppViewModel) {
                 TextButton(
                     onClick = { vm.editMessage(editIndex, editText); editIndex = -1 },
                     enabled = editText.isNotBlank(),
-                ) { Text(if (fromUser) "Senden" else "Speichern") }
+                ) { Text(if (fromUser) tr("Senden") else tr("Speichern")) }
             },
-            dismissButton = { TextButton(onClick = { editIndex = -1 }) { Text("Abbrechen") } },
+            dismissButton = { TextButton(onClick = { editIndex = -1 }) { Text(tr("Abbrechen")) } },
         )
     }
     if (confirmRestart) {
         AlertDialog(
             onDismissRequest = { confirmRestart = false },
-            title = { Text("Neues Gespräch?") },
-            text = { Text("Das bisherige Gespräch mit ${c.name} wird gelöscht. Angeheftete Erinnerungen bleiben.") },
+            title = { Text(tr("Neues Gespräch?")) },
+            text = { Text(tr("Das bisherige Gespräch mit %s wird gelöscht. Angeheftete Erinnerungen bleiben.", c.name)) },
             confirmButton = {
-                TextButton(onClick = { confirmRestart = false; vm.restartChat() }) { Text("Neu anfangen") }
+                TextButton(onClick = { confirmRestart = false; vm.restartChat() }) { Text(tr("Neu anfangen")) }
             },
-            dismissButton = { TextButton(onClick = { confirmRestart = false }) { Text("Abbrechen") } },
+            dismissButton = { TextButton(onClick = { confirmRestart = false }) { Text(tr("Abbrechen")) } },
         )
     }
 
@@ -172,13 +174,13 @@ fun ChatScreen(vm: AppViewModel) {
             TextButton(onClick = { showMemories = true }) {
                 Icon(Icons.Default.PushPin, null)
                 Spacer(Modifier.width(6.dp))
-                Text(if (vm.memories.isEmpty()) "Erinnerungen" else "Erinnerungen (${vm.memories.size})")
+                Text(if (vm.memories.isEmpty()) tr("Erinnerungen") else tr("Erinnerungen (%s)", vm.memories.size))
             }
             IconButton(onClick = { vm.navigate(Screen.Editor(c.id)) }) { Icon(Icons.Default.Edit, "Figur bearbeiten") }
             TextButton(onClick = { confirmRestart = true }, enabled = !vm.isGenerating) {
                 Icon(Icons.Default.Refresh, null)
                 Spacer(Modifier.width(6.dp))
-                Text("Neues Gespräch")
+                Text(tr("Neues Gespräch"))
             }
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outline)
@@ -193,7 +195,7 @@ fun ChatScreen(vm: AppViewModel) {
             ) {
                 item {
                     Text(
-                        "Alles, was ${c.name} sagt, ist erfunden.",
+                        tr("Alles, was %s sagt, ist erfunden.", c.name),
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(bottom = 8.dp),
@@ -239,9 +241,9 @@ fun ChatScreen(vm: AppViewModel) {
                 if (vm.suggesting) {
                     CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                     Spacer(Modifier.width(10.dp))
-                    Text("Gemma sammelt Ideen …", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(tr("Gemma sammelt Ideen …"), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 } else {
-                    Text("Ideen:", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(tr("Ideen:"), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.width(8.dp))
                     LazyRow(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         items(vm.suggestions) { idea ->
@@ -269,10 +271,10 @@ fun ChatScreen(vm: AppViewModel) {
 }
 
 private fun statusLine(vm: AppViewModel): String = when (val s = vm.engineState) {
-    is EngineState.Ready -> "${s.model.title} · ${s.accelerator.label}"
-    is EngineState.Loading -> "${s.modelTitle} wird geladen …"
-    is EngineState.Failed -> "Modell nicht bereit"
-    EngineState.Idle -> "Modell nicht geladen"
+    is EngineState.Ready -> "${s.model.title} · ${tr(s.accelerator.label)}"
+    is EngineState.Loading -> tr("%s wird geladen …", s.modelTitle)
+    is EngineState.Failed -> tr("Modell nicht bereit")
+    EngineState.Idle -> tr("Modell nicht geladen")
 }
 
 /** Hinweis in der Mitte, solange das Modell lädt oder fehlt. */
@@ -294,8 +296,8 @@ private fun EngineOverlay(vm: AppViewModel, modifier: Modifier) {
             vm.preparing -> {
                 CircularProgressIndicator()
                 Text(
-                    if (s is EngineState.Loading) "${s.modelTitle} wird geladen …\nDas dauert beim ersten Mal ein paar Sekunden."
-                    else "Gespräch wird vorbereitet …",
+                    if (s is EngineState.Loading) tr("%s wird geladen …\nDas dauert beim ersten Mal ein paar Sekunden.", s.modelTitle)
+                    else tr("Gespräch wird vorbereitet …"),
                     textAlign = TextAlign.Center,
                 )
             }
@@ -303,16 +305,16 @@ private fun EngineOverlay(vm: AppViewModel, modifier: Modifier) {
                 Text(s.message, textAlign = TextAlign.Center)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (vm.useOllama) {
-                        TextButton(onClick = { vm.switchToInternal() }) { Text("Auf intern wechseln") }
+                        TextButton(onClick = { vm.switchToInternal() }) { Text(tr("Auf intern wechseln")) }
                     } else {
-                        TextButton(onClick = { vm.navigate(Screen.Models) }) { Text("Zu den Einstellungen") }
+                        TextButton(onClick = { vm.navigate(Screen.Models) }) { Text(tr("Zu den Einstellungen")) }
                     }
-                    Button(onClick = { vm.retryChat() }) { Text("Nochmal versuchen") }
+                    Button(onClick = { vm.retryChat() }) { Text(tr("Nochmal versuchen")) }
                 }
             }
             else -> {
-                Text("Das Modell ist nicht geladen.", textAlign = TextAlign.Center)
-                Button(onClick = { vm.retryChat() }) { Text("${vm.chatModel.title} laden") }
+                Text(tr("Das Modell ist nicht geladen."), textAlign = TextAlign.Center)
+                Button(onClick = { vm.retryChat() }) { Text(tr("%s laden", vm.chatModel.title)) }
             }
         }
     }
@@ -374,25 +376,25 @@ private fun MessageBubble(
             ) {
                 Text(
                     text = roleplayText(
-                        msg.text.ifEmpty { if (streaming && summarizing) "*erinnert sich an das Bisherige …*" else if (streaming) "…" else "" }
+                        msg.text.ifEmpty { if (streaming && summarizing) tr("*erinnert sich an das Bisherige …*") else if (streaming) "…" else "" }
                     ),
                     fontSize = 16.sp,
                     lineHeight = 22.sp,
                 )
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                     DropdownMenuItem(
-                        text = { Text("Als Erinnerung anheften") },
+                        text = { Text(tr("Als Erinnerung anheften")) },
                         leadingIcon = { Icon(Icons.Default.PushPin, null) },
                         onClick = { menuOpen = false; onPin() },
                     )
                     DropdownMenuItem(
-                        text = { Text("Bearbeiten") },
+                        text = { Text(tr("Bearbeiten")) },
                         leadingIcon = { Icon(Icons.Default.Edit, null) },
                         enabled = !busy,
                         onClick = { menuOpen = false; onEdit() },
                     )
                     DropdownMenuItem(
-                        text = { Text("Löschen", color = MaterialTheme.colorScheme.error) },
+                        text = { Text(tr("Löschen"), color = MaterialTheme.colorScheme.error) },
                         leadingIcon = { Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error) },
                         enabled = !busy,
                         onClick = { menuOpen = false; onDelete() },
@@ -477,7 +479,7 @@ private fun InputBar(vm: AppViewModel, c: Character, text: TextFieldValue, onTex
                 modifier = Modifier.size(64.dp).clip(RoundedCornerShape(10.dp)),
             )
             Spacer(Modifier.width(8.dp))
-            Text("Bild geht mit der nächsten Nachricht mit", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(tr("Bild geht mit der nächsten Nachricht mit"), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             IconButton(onClick = { vm.clearPendingImage() }) { Icon(Icons.Default.Close, "Bild entfernen") }
         }
     }
@@ -488,7 +490,7 @@ private fun InputBar(vm: AppViewModel, c: Character, text: TextFieldValue, onTex
         OutlinedTextField(
             value = text,
             onValueChange = onText,
-            placeholder = { Text("Nachricht an ${c.name} …") },
+            placeholder = { Text(tr("Nachricht an %s …", c.name)) },
             enabled = vm.chatReady,
             modifier = Modifier.weight(1f),
             maxLines = 5,
@@ -517,12 +519,12 @@ private fun InputBar(vm: AppViewModel, c: Character, text: TextFieldValue, onTex
             onClick = {
                 val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
                     .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                    .putExtra(RecognizerIntent.EXTRA_LANGUAGE, "de-DE")
-                    .putExtra(RecognizerIntent.EXTRA_PROMPT, "Sprich mit ${c.name} …")
+                    .putExtra(RecognizerIntent.EXTRA_LANGUAGE, I18n.lang.tag)
+                    .putExtra(RecognizerIntent.EXTRA_PROMPT, tr("Sprich mit %s …", c.name))
                 try {
                     speech.launch(intent)
                 } catch (e: ActivityNotFoundException) {
-                    Toast.makeText(context, "Keine Spracherkennung auf diesem Gerät gefunden", Toast.LENGTH_LONG).show()
+                    Toast.makeText(context, tr("Keine Spracherkennung auf diesem Gerät gefunden"), Toast.LENGTH_LONG).show()
                 }
             },
             enabled = vm.chatReady && !vm.isGenerating,
@@ -561,14 +563,14 @@ private fun MemoriesDialog(vm: AppViewModel, c: Character, onClose: () -> Unit) 
     var newMemory by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onClose,
-        title = { Text("Erinnerungen von ${c.name}") },
+        title = { Text(tr("Erinnerungen von %s", c.name)) },
         text = {
             Column(
                 Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 Text(
-                    "Das hier vergisst ${c.name} nie, auch in langen Gesprächen. Tipp: Lange auf eine Nachricht drücken, um sie anzuheften.",
+                    tr("Das hier vergisst %s nie, auch in langen Gesprächen. Tipp: Lange auf eine Nachricht drücken, um sie anzuheften.", c.name),
                     fontSize = 13.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -584,7 +586,7 @@ private fun MemoriesDialog(vm: AppViewModel, c: Character, onClose: () -> Unit) 
                     OutlinedTextField(
                         value = newMemory,
                         onValueChange = { newMemory = it },
-                        placeholder = { Text("z. B. Wir haben den Schatz auf der Nebelinsel versteckt") },
+                        placeholder = { Text(tr("z. B. Wir haben den Schatz auf der Nebelinsel versteckt")) },
                         modifier = Modifier.weight(1f),
                         maxLines = 3,
                     )
@@ -594,12 +596,12 @@ private fun MemoriesDialog(vm: AppViewModel, c: Character, onClose: () -> Unit) 
                 }
                 if (vm.summary.isNotBlank()) {
                     HorizontalDivider(color = MaterialTheme.colorScheme.outline)
-                    Text("Zusammenfassung (automatisch)", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                    Text(tr("Zusammenfassung (automatisch)"), fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                     Text(vm.summary, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    TextButton(onClick = { vm.clearSummary() }) { Text("Zusammenfassung löschen") }
+                    TextButton(onClick = { vm.clearSummary() }) { Text(tr("Zusammenfassung löschen")) }
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onClose) { Text("Fertig") } },
+        confirmButton = { TextButton(onClick = onClose) { Text(tr("Fertig")) } },
     )
 }

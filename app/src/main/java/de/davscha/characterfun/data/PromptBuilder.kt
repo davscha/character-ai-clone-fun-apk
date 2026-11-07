@@ -1,5 +1,7 @@
 package de.davscha.characterfun.data
 
+import de.davscha.characterfun.i18n.I18n
+
 /**
  * Baut aus den Feldern einer Figur die Anweisung, die vor jedem Gespräch an das Modell geht.
  * Dazu kommen die Erinnerungen: was die Figur über dich weiß, angeheftete Notizen und
@@ -44,7 +46,7 @@ object PromptBuilder {
         appendLine("Regeln:")
         appendLine("- Bleib immer in der Rolle von ${c.name} und gib nie zu, eine KI zu sein.")
         appendLine("- ${c.replyLength.rule} Keine Aufzählungen, keine Überschriften.")
-        appendLine("- Antworte auf Deutsch, außer deine Beschreibung sagt etwas anderes.")
+        appendLine("- Antworte auf ${I18n.lang.promptName}, außer deine Beschreibung sagt etwas anderes.")
         append("- Handlungen und Gesten schreibst du zwischen Sternchen, z. B. *grinst*.")
     }
 
@@ -82,7 +84,7 @@ object ReplySuggestions {
         recent.forEach { m -> appendLine("${if (m.fromUser) "Nutzer" else characterName}: ${m.text.trim()}") }
         appendLine()
         if (aboutUser.isNotBlank()) appendLine("Über den Nutzer: ${aboutUser.trim()}")
-        appendLine("Schlage genau fünf mögliche nächste Nachrichten des NUTZERS an $characterName vor, auf Deutsch, je höchstens 20 Wörter.")
+        appendLine("Schlage genau fünf mögliche nächste Nachrichten des NUTZERS an $characterName vor, auf ${I18n.lang.promptName}, je höchstens 20 Wörter.")
         appendLine("Mach sie unterschiedlich: eine neugierige Frage, eine freche oder witzige Antwort, eine gefühlvolle Antwort,")
         appendLine("eine Handlung zwischen Sternchen (z. B. *schaut sich misstrauisch um*) und eine, die die Geschichte in eine neue Richtung lenkt.")
         append("Format: [\"…\", \"…\", \"…\", \"…\", \"…\"]")

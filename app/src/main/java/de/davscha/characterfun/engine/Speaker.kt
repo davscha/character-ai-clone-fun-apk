@@ -4,6 +4,7 @@ import android.content.Context
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.speech.tts.Voice
+import de.davscha.characterfun.i18n.I18n
 import java.util.Locale
 
 /** Eine Stimme der Android-Sprachausgabe */
@@ -13,14 +14,15 @@ data class VoiceInfo(
     /** true = braucht Internet (Online-Stimme von Google) */
     val online: Boolean,
 ) {
-    val isGerman get() = locale.language == "de"
+    /** Stimme in der Sprache der Oberfläche? */
+    val isGerman get() = locale.language == I18n.lang.locale.language
 
     /** Lesbarer Name, z. B. "Deutsch (Deutschland) · deb · offline" */
     val label: String
         get() {
             // Google-Stimmen heißen z. B. "de-de-x-deb-local" – das Kürzel in der Mitte unterscheidet sie
             val short = name.split("-").let { p -> if (p.size >= 4 && p[2] == "x") p[3] else name }
-            return "${locale.getDisplayName(Locale.GERMAN)} · $short · ${if (online) "online" else "offline"}"
+            return "${locale.getDisplayName(I18n.lang.locale)} · $short · ${if (online) "online" else "offline"}"
         }
 }
 
@@ -40,7 +42,7 @@ class Speaker(
     private val tts: TextToSpeech = TextToSpeech(context.applicationContext) { status ->
         ready = status == TextToSpeech.SUCCESS
         if (ready) {
-            tts.language = Locale.GERMANY
+            tts.language = I18n.lang.locale
             onVoicesReady(loadVoices())
             pending?.invoke()
             pending = null
@@ -70,7 +72,7 @@ class Speaker(
         if (clean.isEmpty()) return
         val action = {
             val voice = voiceName.takeIf { it.isNotEmpty() }?.let { n -> tts.voices?.firstOrNull { it.name == n } }
-            if (voice != null) tts.voice = voice else tts.language = Locale.GERMANY
+            if (voice != null) tts.voice = voice else tts.language = I18n.lang.locale
             tts.setPitch(pitch)
             tts.setSpeechRate(rate)
             tts.speak(clean, TextToSpeech.QUEUE_FLUSH, null, id)
