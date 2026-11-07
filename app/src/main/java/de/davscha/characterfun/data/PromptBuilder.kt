@@ -60,7 +60,7 @@ object PromptBuilder {
     // ---------- Rooms (Gruppenchat) ----------
 
     /** Anweisung für eine Figur im Gruppenchat: ihre Rolle plus wer sonst noch da ist. */
-    fun buildForRoom(c: Character, others: List<Character>, scenario: String, aboutUser: String): String = buildString {
+    fun buildForRoom(c: Character, others: List<Character>, scenario: String, aboutUser: String, gameRules: String = ""): String = buildString {
         append(build(c, aboutUser))
         appendLine()
         appendLine()
@@ -70,6 +70,12 @@ object PromptBuilder {
         appendLine("- Nachrichten der anderen stehen mit ihrem Namen davor, z. B. \"${others.firstOrNull()?.name ?: "Figur"}: …\".")
         appendLine("- Antworte nur als ${c.name}. Schreibe nie für die anderen und setze deinen eigenen Namen nicht vor die Antwort.")
         append("- Du darfst die anderen direkt ansprechen und auf sie reagieren.")
+        if (gameRules.isNotBlank()) {
+            appendLine()
+            appendLine()
+            appendLine("Spiel (diese Regeln gehen den Regeln oben vor):")
+            append(gameRules)
+        }
     }
 
     // ---------- Zusammenfassung älterer Nachrichten ----------

@@ -39,6 +39,15 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.filled.SportsEsports
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
+import androidx.compose.material3.FilterChip
+import de.davscha.characterfun.data.RoomGameState
+import de.davscha.characterfun.data.RoomGameType
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.StopCircle
 import androidx.compose.material3.AlertDialog
@@ -88,6 +97,8 @@ fun RoomScreen(vm: AppViewModel) {
         if (room.messages.isNotEmpty()) listState.scrollToItem(room.messages.lastIndex + 1, Int.MAX_VALUE)
     }
     var confirmClear by remember { mutableStateOf(false) }
+    var showGames by remember { mutableStateOf(false) }
+    if (showGames) RoomGamePicker(vm) { showGames = false }
     if (confirmClear) {
         AlertDialog(
             onDismissRequest = { confirmClear = false },
@@ -125,10 +136,14 @@ fun RoomScreen(vm: AppViewModel) {
                     tint = if (vm.autoRead) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+            IconButton(onClick = { showGames = true }, enabled = !vm.roomBusy) {
+                Icon(Icons.Default.SportsEsports, tr("Spiel starten"), tint = MaterialTheme.colorScheme.secondary)
+            }
             IconButton(onClick = { vm.navigate(Screen.RoomEditor(room.id)) }, enabled = !vm.roomBusy) { Icon(Icons.Default.Edit, tr("Raum bearbeiten")) }
             IconButton(onClick = { confirmClear = true }, enabled = !vm.roomBusy) { Icon(Icons.Default.Refresh, tr("Neues Gespräch")) }
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outline)
+        room.game?.let { RoomGameBanner(vm, it) }
 
         LazyColumn(
             state = listState,
@@ -167,6 +182,17 @@ fun RoomScreen(vm: AppViewModel) {
                 }
             }
             itemsIndexed(room.messages) { i, m ->
+                if (m.isNarrator) {
+                    Text(
+                        m.text,
+                        fontSize = 14.sp,
+                        fontStyle = FontStyle.Italic,
+                        color = MaterialTheme.colorScheme.secondary,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.widthIn(max = 560.dp).padding(vertical = 4.dp),
+                    )
+                    return@itemsIndexed
+                }
                 RoomBubble(
                     vm, m,
                     streaming = vm.roomBusy && i == room.messages.lastIndex && !m.fromUser,
@@ -314,6 +340,96 @@ private fun RoomInputBar(vm: AppViewModel) {
                 enabled = text.text.isNotBlank(),
                 modifier = Modifier.size(52.dp),
             ) { Icon(Icons.AutoMirrored.Filled.Send, tr("Senden")) }
+        }
+    }
+}
+
+/** Raum-Spiel aussuchen. Beim Quiz wählst du den Quizmaster (oder Zufall). */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun RoomGamePicker(vm: AppViewModel, onClose: () -> Unit) {
+    val room = vm.currentRoom ?: return
+    val members = vm.roomMembers(room)
+    var host by remember { mutableStateOf<String?>(null) }
+    AlertDialog(
+        onDismissRequest = onClose,
+        title = { Text(tr("Spiel im Raum")) },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                if (room.game != null) {
+                    Text(tr("Das laufende Spiel wird dabei beendet."), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                RoomGameType.entries.forEach { t ->
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                            .padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Text("${t.emoji} ${tr(t.label)}", fontWeight = FontWeight.SemiBold)
+                        Text(tr(t.description), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        if (t == RoomGameType.QUIZ) {
+                            Text(tr("Quizmaster:"), fontSize = 13.sp)
+                            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                FilterChip(selected = host == null, onClick = { host = null }, label = { Text(tr("Zufall")) })
+                                members.forEach { c ->
+                                    FilterChip(selected = host == c.id, onClick = { host = c.id }, label = { Text("${c.emoji} ${c.name}") })
+                                }
+                            }
+                        }
+                        Button(onClick = {
+                            onClose()
+                            if (room.game != null) vm.endRoomGame()
+                            vm.startRoomGame(t, host)
+                        }) { Text(tr("Los geht's")) }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onClose) { Text(tr("Abbrechen")) } },
+    )
+}
+
+/** Leiste unter der Kopfzeile, solange ein Raum-Spiel läuft */
+@Composable
+private fun RoomGameBanner(vm: AppViewModel, g: RoomGameState) {
+    var accuseMenu by remember { mutableStateOf(false) }
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.secondary.copy(alpha = 0.12f))
+            .padding(horizontal = 16.dp, vertical = 4.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("${g.type.emoji} ${tr(g.type.label)}", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+            Spacer(Modifier.width(10.dp))
+            Text(
+                if (g.type == RoomGameType.QUIZ) vm.scoreLine(g) else tr(g.case),
+                fontSize = 13.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            when (g.type) {
+                RoomGameType.QUIZ -> TextButton(onClick = { vm.quizNextQuestion() }, enabled = !vm.roomBusy) { Text(tr("Nächste Frage")) }
+                RoomGameType.DETECTIVE -> Box {
+                    TextButton(onClick = { accuseMenu = true }, enabled = !vm.roomBusy) { Text("👉 " + tr("Beschuldigen")) }
+                    DropdownMenu(expanded = accuseMenu, onDismissRequest = { accuseMenu = false }) {
+                        vm.currentRoom?.let { r ->
+                            vm.roomMembers(r).forEach { c ->
+                                DropdownMenuItem(
+                                    text = { Text("${c.emoji} ${c.name}") },
+                                    onClick = { accuseMenu = false; vm.accuse(c.id) },
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            TextButton(onClick = { vm.endRoomGame() }) { Text(tr("Spiel beenden")) }
         }
     }
 }

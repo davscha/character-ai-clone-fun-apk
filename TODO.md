@@ -32,8 +32,8 @@ Stand: 7. November 2026. Abhaken mit `[x]`, sobald etwas fertig ist.
 
 ## Runde 2 – Room-Spiele (Etappe B)
 
-- [ ] **17. Quiz-Abend im Room** – eine Figur fragt, die anderen raten mit, Punkte-Tabelle
-- [ ] **18. Werwolf/Detektiv im Room** – eine Figur ist heimlich der Täter, du entlarvst sie
+- [x] **17. Quiz-Abend im Room** – eine Figur fragt, die anderen raten mit, Punkte-Tabelle
+- [x] **18. Werwolf/Detektiv im Room** – eine Figur ist heimlich der Täter, du entlarvst sie
 
 ## Runde 2 – KI-Hilfen (Etappe C)
 

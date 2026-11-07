@@ -7,6 +7,8 @@ import java.util.UUID
 /** Eine Nachricht im Gruppenchat. [speakerId] leer = von dir, sonst die Id der Figur. */
 data class RoomMessage(val speakerId: String, val text: String) {
     val fromUser get() = speakerId.isEmpty()
+    /** Hinweis der App, z. B. Spielstart */
+    val isNarrator get() = speakerId == RoomGames.NARRATOR
 
     fun toJson(): JSONObject = JSONObject().put("sprecher", speakerId).put("text", text)
 
@@ -24,6 +26,8 @@ data class Room(
     val scenario: String = "",
     val messages: List<RoomMessage> = emptyList(),
     val updatedAt: Long = System.currentTimeMillis(),
+    /** Laufendes Spiel (null = keins) */
+    val game: RoomGameState? = null,
 ) {
     fun toJson(): JSONObject = JSONObject()
         .put("id", id)
@@ -32,6 +36,7 @@ data class Room(
         .put("szene", scenario)
         .put("nachrichten", JSONArray(messages.map { it.toJson() }))
         .put("geaendert", updatedAt)
+        .apply { game?.let { put("spiel", it.toJson()) } }
 
     companion object {
         fun fromJson(o: JSONObject): Room {
@@ -44,6 +49,7 @@ data class Room(
                 scenario = o.optString("szene"),
                 messages = List(msgs.length()) { RoomMessage.fromJson(msgs.getJSONObject(it)) },
                 updatedAt = o.optLong("geaendert"),
+                game = RoomGameState.fromJson(o.optJSONObject("spiel")),
             )
         }
     }

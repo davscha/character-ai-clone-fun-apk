@@ -19,6 +19,9 @@ import de.davscha.characterfun.data.Character
 import de.davscha.characterfun.data.ChatMessage
 import de.davscha.characterfun.data.SavedChat
 import de.davscha.characterfun.data.Room
+import de.davscha.characterfun.data.RoomGameState
+import de.davscha.characterfun.data.RoomGameType
+import de.davscha.characterfun.data.RoomGames
 import de.davscha.characterfun.data.Game
 import de.davscha.characterfun.data.GameState
 import de.davscha.characterfun.data.Games
@@ -1090,7 +1093,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun clearRoom() {
         val r = currentRoom ?: return
         stopRoom()
-        saveRoom(r.copy(messages = emptyList()))
+        saveRoom(r.copy(messages = emptyList(), game = null))
     }
 
     /** Deine Nachricht – danach antworten alle Figuren einmal, in zufälliger Reihenfolge. */
@@ -1099,8 +1102,100 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val t = text.trim()
         if (t.isEmpty() || roomBusy) return
         currentRoom = r.copy(messages = r.messages + RoomMessage("", t))
-        runRoomTurns(roomMembers(r).shuffled())
+        val g = r.game
+        val host = g?.takeIf { it.type == RoomGameType.QUIZ }?.let { character(it.hostId) }
+        if (host != null) {
+            // Quiz: du hast geantwortet – der Quizmaster löst auf und vergibt Punkte
+            runRoomTurns(listOf(host to "Alle haben geantwortet. Löse jetzt auf und vergib Punkte.")) { c, reply ->
+                if (c.id == host.id) addQuizPoints(reply)
+            }
+        } else {
+            runRoomTurns(roomMembers(r).shuffled().map { it to null })
+        }
     }
+
+    // ---------- Spiele im Raum ----------
+
+    fun startRoomGame(type: RoomGameType, hostId: String? = null) {
+        val r = currentRoom ?: return
+        if (roomBusy) return
+        val members = roomMembers(r)
+        if (members.size < 2) return
+        when (type) {
+            RoomGameType.QUIZ -> {
+                val host = members.firstOrNull { it.id == hostId } ?: members.random()
+                val scores = (members.filter { it.id != host.id }.map { it.id } + "").associateWith { 0 }
+                currentRoom = r.copy(
+                    game = RoomGameState(type, hostId = host.id, scores = scores),
+                    messages = r.messages + RoomMessage(RoomGames.NARRATOR, tr("🏆 Quiz-Abend! Quizmaster ist %s.", host.name)),
+                )
+                quizNextQuestion()
+            }
+            RoomGameType.DETECTIVE -> {
+                val case = RoomGames.randomCase()
+                currentRoom = r.copy(
+                    game = RoomGameState(type, culpritId = members.random().id, case = case),
+                    messages = r.messages + RoomMessage(RoomGames.NARRATOR, tr("🕵️ Ein neuer Fall: %s Einer von ihnen war's – befrag sie und beschuldige den Täter.", tr(case))),
+                )
+                runRoomTurns(members.shuffled().map { it to "Reagiere kurz auf den Fall." })
+            }
+        }
+    }
+
+    /** Quiz: der Quizmaster stellt eine Frage, danach geben die anderen Figuren ihren Tipp ab */
+    fun quizNextQuestion() {
+        val r = currentRoom ?: return
+        val g = r.game?.takeIf { it.type == RoomGameType.QUIZ } ?: return
+        if (roomBusy) return
+        val host = character(g.hostId) ?: return
+        val others = roomMembers(r).filter { it.id != host.id }.shuffled()
+        runRoomTurns(listOf(host to "Stell jetzt die nächste Quizfrage.") + others.map { it to "Gib deinen Tipp ab." })
+    }
+
+    private fun addQuizPoints(reply: String) {
+        val r = currentRoom ?: return
+        val g = r.game ?: return
+        val winners = RoomGames.parseScores(reply, roomMembers(r).filter { it.id != g.hostId }, listOf("Nutzer", "User", "Usuario", "Utilisateur", "du", "you", "tú", "toi"))
+        if (winners.isEmpty()) return
+        val scores = g.scores.toMutableMap()
+        winners.forEach { scores[it] = (scores[it] ?: 0) + 1 }
+        currentRoom = r.copy(game = g.copy(scores = scores))
+    }
+
+    /** Wer war's: du beschuldigst eine Figur. Danach ist der Fall zu Ende. */
+    fun accuse(id: String) {
+        val r = currentRoom ?: return
+        val g = r.game?.takeIf { it.type == RoomGameType.DETECTIVE } ?: return
+        if (roomBusy) return
+        val accused = character(id) ?: return
+        val culprit = character(g.culpritId) ?: return
+        currentRoom = r.copy(messages = r.messages + RoomMessage("", tr("Ich beschuldige %s!", accused.name)))
+        val right = accused.id == culprit.id
+        val turns = if (right) listOf(culprit to "Du wurdest richtig überführt. Gestehe jetzt – mit Stil.")
+        else listOf(
+            accused to "Du wurdest zu Unrecht beschuldigt. Empöre dich.",
+            culprit to "Jetzt kommt heraus, dass du es warst. Gib es triumphierend zu.",
+        )
+        runRoomTurns(turns, onDone = {
+            val end = if (right) tr("🎉 Fall gelöst! Es war %s.", culprit.name) else tr("Daneben – es war %s.", culprit.name)
+            currentRoom?.let { cur -> currentRoom = cur.copy(game = null, messages = cur.messages + RoomMessage(RoomGames.NARRATOR, end)) }
+        })
+    }
+
+    fun endRoomGame() {
+        val r = currentRoom ?: return
+        val g = r.game ?: return
+        if (roomBusy) stopRoom()
+        val note = when (g.type) {
+            RoomGameType.QUIZ -> tr("Endstand: %s", scoreLine(g))
+            RoomGameType.DETECTIVE -> tr("Fall abgebrochen – es war %s.", character(g.culpritId)?.name ?: "?")
+        }
+        saveRoom(r.copy(game = null, messages = r.messages + RoomMessage(RoomGames.NARRATOR, note)))
+    }
+
+    /** Punkte-Tabelle als Text, beste zuerst */
+    fun scoreLine(g: RoomGameState): String = g.scores.entries.sortedByDescending { it.value }
+        .joinToString(" · ") { (id, p) -> "${if (id.isEmpty()) tr("Du") else character(id)?.name ?: "?"} $p" }
 
     /** Eine Figur sagt etwas, ohne dass du schreibst – [speakerId] = null: wer als Nächstes dran ist. */
     fun roomContinue(speakerId: String? = null) {
@@ -1113,7 +1208,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             val lastIdx = members.indexOfFirst { it.id == r.messages.lastOrNull { m -> !m.fromUser }?.speakerId }
             members[(lastIdx + 1) % members.size]
         }
-        runRoomTurns(listOf(next))
+        runRoomTurns(listOf(next to null))
     }
 
     fun stopRoom() {
@@ -1121,7 +1216,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         engine.stop()
     }
 
-    private fun runRoomTurns(speakers: List<Character>) {
+    private fun runRoomTurns(
+        turns: List<Pair<Character, String?>>,
+        onDone: () -> Unit = {},
+        onReply: (Character, String) -> Unit = { _, _ -> },
+    ) {
         roomBusy = true
         roomJob = viewModelScope.launch {
             try {
@@ -1129,7 +1228,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     if (preparing) chatJob?.join()
                     if (engineState !is EngineState.Ready) ensureModelLoaded(defaultModel)
                 }
-                for (c in speakers) generateRoomTurn(c)
+                for ((c, instruction) in turns) onReply(c, generateRoomTurn(c, instruction))
+                onDone()
             } catch (e: kotlinx.coroutines.CancellationException) {
                 // Stopp gedrückt oder Raum verlassen
             } catch (e: Exception) {
@@ -1144,10 +1244,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Eine Figur antwortet im Raum. Aus ihrer Sicht sind alle anderen Nachrichten "von außen" mit Namen davor. */
-    private suspend fun generateRoomTurn(c: Character) {
-        val room = currentRoom ?: return
+    private suspend fun generateRoomTurn(c: Character, instruction: String? = null): String {
+        val room = currentRoom ?: return ""
         val others = roomMembers(room).filter { it.id != c.id }
-        fun nameOf(m: RoomMessage) = if (m.fromUser) "Nutzer" else character(m.speakerId)?.name ?: "?"
+        fun nameOf(m: RoomMessage) = when {
+            m.fromUser -> "Nutzer"
+            m.isNarrator -> "Spielleitung"
+            else -> character(m.speakerId)?.name ?: "?"
+        }
 
         // Nur der neuere Teil des Gesprächs, damit er ins Gedächtnis passt
         val recent = ArrayDeque<RoomMessage>()
@@ -1166,9 +1270,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             if (last != null && last.first == !mine) turns[turns.lastIndex] = last.first to (last.second + "\n" + line)
             else turns += !mine to line
         }
-        val sendText = if (turns.lastOrNull()?.first == true) turns.removeAt(turns.lastIndex).second else "(Mach weiter.)"
+        val outside = if (turns.lastOrNull()?.first == true) turns.removeAt(turns.lastIndex).second else ""
+        val sendText = when {
+            instruction != null && outside.isNotEmpty() -> "$outside\n\n($instruction)"
+            instruction != null -> "($instruction)"
+            outside.isNotEmpty() -> outside
+            else -> "(Mach weiter.)"
+        }
 
-        val prompt = PromptBuilder.buildForRoom(c, others, room.scenario, aboutUser)
+        val rules = room.game?.let { g -> RoomGames.rules(g, c) { id -> character(id)?.name ?: "?" } }.orEmpty()
+        val prompt = PromptBuilder.buildForRoom(c, others, room.scenario, aboutUser, rules)
         withContext(Dispatchers.IO) { engine.startConversation(prompt, turns, temperature) }
         needsRebuild = true // ein offener Einzelchat muss danach neu aufgebaut werden
 
@@ -1200,6 +1311,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             kotlinx.coroutines.delay(400)
             while (speakingId != null) kotlinx.coroutines.delay(200)
         }
+        return clean
     }
 
     /** Eine Nachricht im Raum vorlesen (nochmal tippen = aufhören) */
