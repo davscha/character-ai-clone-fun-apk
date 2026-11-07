@@ -1,5 +1,7 @@
 package de.davscha.characterfun.ui
 
+import androidx.compose.foundation.horizontalScroll
+
 import androidx.compose.foundation.layout.size
 
 import de.davscha.characterfun.i18n.tr
@@ -121,15 +123,17 @@ fun GalleryScreen(vm: AppViewModel) {
         },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
-            // Kopfzeile: Name, Suche, Modelle
-            Row(
-                Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(Modifier.weight(1f)) {
-                    Text(tr("Character Fun"), fontSize = 26.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                    Text(modelLine(vm), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            // Kopfzeile: Name, Suche, Knöpfe – quer in einer Zeile, hochkant in mehreren
+            val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+                if (uri != null) scope.launch { Toast.makeText(context, vm.importCharacter(uri), Toast.LENGTH_LONG).show() }
+            }
+            val title: @Composable (Modifier) -> Unit = { m ->
+                Column(m) {
+                    Text(tr("Character Fun"), fontSize = 26.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, maxLines = 1)
+                    Text(modelLine(vm), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
                 }
+            }
+            val search: @Composable (Modifier) -> Unit = { m ->
                 OutlinedTextField(
                     value = query,
                     onValueChange = { query = it },
@@ -137,12 +141,10 @@ fun GalleryScreen(vm: AppViewModel) {
                     leadingIcon = { Icon(Icons.Default.Search, null) },
                     singleLine = true,
                     shape = RoundedCornerShape(24.dp),
-                    modifier = Modifier.widthIn(max = 360.dp),
+                    modifier = m,
                 )
-                Spacer(Modifier.width(12.dp))
-                val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-                    if (uri != null) scope.launch { Toast.makeText(context, vm.importCharacter(uri), Toast.LENGTH_LONG).show() }
-                }
+            }
+            val buttons: @Composable () -> Unit = {
                 TextButton(onClick = {
                     randomProgress = 0
                     scope.launch {
@@ -170,6 +172,28 @@ fun GalleryScreen(vm: AppViewModel) {
                     Icon(Icons.Default.Settings, null)
                     Spacer(Modifier.width(6.dp))
                     Text(tr("Einstellungen"))
+                }
+            }
+            androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth()) {
+                if (maxWidth >= 1150.dp) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        title(Modifier.weight(1f))
+                        search(Modifier.widthIn(max = 360.dp))
+                        Spacer(Modifier.width(12.dp))
+                        buttons()
+                    }
+                } else {
+                    Column(
+                        Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        title(Modifier.fillMaxWidth())
+                        search(Modifier.fillMaxWidth())
+                        Row(Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState())) { buttons() }
+                    }
                 }
             }
 
