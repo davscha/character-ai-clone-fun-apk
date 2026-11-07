@@ -115,17 +115,25 @@ fun ImageMessageDialog(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 // Auswählen oder malen
-                if (path == null && !paintMode) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilterChip(selected = true, onClick = {}, label = { Text("🖼️ " + tr("Bild auswählen")) })
-                        FilterChip(selected = false, onClick = { paintMode = true }, enabled = vm.comfyReady, label = { Text("🎨 " + tr("Bild malen (Tags)")) })
-                    }
+                // Immer sichtbar: zwischen Auswählen und Malen wechseln – auch nach dem Malen
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(
+                        selected = !paintMode,
+                        onClick = { paintMode = false; openPicker() },
+                        enabled = !busy,
+                        label = { Text("🖼️ " + tr("Bild auswählen")) },
+                    )
+                    FilterChip(
+                        selected = paintMode,
+                        onClick = { paintMode = true },
+                        enabled = vm.comfyReady && !busy,
+                        label = { Text("🎨 " + tr("Bild malen (Tags)")) },
+                    )
                 }
-                if (paintMode && path == null) {
+                if (paintMode) {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             LocationPicker(vm, vm.location(paintLocation), enabled = !painting) { paintLocation = it }
-                            TextButton(onClick = { paintMode = false }, enabled = !painting) { Text(tr("Doch auswählen")) }
                         }
                         // Wer ist mit auf dem Bild?
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -173,7 +181,8 @@ fun ImageMessageDialog(
                                     painting = true
                                     seconds = 0
                                     scope.launch {
-                                        runCatching { vm.paintFree(paintTags, vm.location(paintLocation), who) { seconds = it } }
+                                        val again = path != null
+                                        runCatching { vm.paintFree(paintTags, vm.location(paintLocation), who, randomSeed = again) { seconds = it } }
                                             .onSuccess { p ->
                                                 path = p
                                                 result = ""
@@ -187,7 +196,7 @@ fun ImageMessageDialog(
                                     }
                                 },
                                 enabled = vm.comfyReady && paintTags.isNotBlank(),
-                            ) { Text(tr("Malen")) }
+                            ) { Text(if (path == null) tr("Malen") else tr("Neu malen")) }
                         }
                     }
                 }

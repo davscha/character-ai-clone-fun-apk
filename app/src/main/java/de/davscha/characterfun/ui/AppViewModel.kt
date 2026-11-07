@@ -1250,10 +1250,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Bild für „Bild als Nachricht“ malen: optional mit einer Figur darauf, sonst nur Ort + Tags */
-    suspend fun paintFree(tags: String, loc: FundusItem?, who: Character?, onProgress: (Int) -> Unit): String {
+    suspend fun paintFree(tags: String, loc: FundusItem?, who: Character?, randomSeed: Boolean = false, onProgress: (Int) -> Unit): String {
         if (who != null) {
             val outfit = if (who.id == chatCharacter?.id) chatOutfit else clothing(who.defaultOutfitId)
-            return paintScene(who, loc, outfit, tags, randomSeed = false, onProgress = onProgress)
+            return paintScene(who, loc, outfit, tags, randomSeed = randomSeed, onProgress = onProgress)
         }
         val png = paint(ImagePrompt.join(loc?.tags, tags), null, (0..999_999_999L).random(), "multiple views", onProgress)
         return withContext(Dispatchers.IO) { repo.saveChatImageBytes(png) }
