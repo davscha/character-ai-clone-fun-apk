@@ -133,9 +133,6 @@ fun ModelsScreen(vm: AppViewModel) {
                     ImportBox(vm)
                 }
 
-                SectionTitle("Stimmen-Server (geklonte Stimmen)")
-                VoiceServerSettings(vm)
-
                 SectionTitle("Kreativität")
                 Text(
                     "%.1f – niedrig = vorhersehbar, hoch = verrückter. Gilt ab dem nächsten Gespräch.".format(vm.temperature),
@@ -265,54 +262,6 @@ private fun OllamaModelPicker(vm: AppViewModel, models: List<OllamaModel>) {
             }
         }
     }
-}
-
-/** Stimmen-Server auf dem PC (server/stimmen_server.py): Adresse, Port, Verbindungstest. */
-@Composable
-private fun VoiceServerSettings(vm: AppViewModel) {
-    var portText by remember(vm.voicePort) { mutableStateOf(vm.voicePort.toString()) }
-    Text(
-        "Für Figuren mit geklonter Stimme. Der Server läuft auf dem PC – Anleitung im Repo unter server/ANLEITUNG.md.",
-        fontSize = 12.sp,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        OutlinedTextField(
-            value = vm.voiceHost,
-            onValueChange = { vm.changeVoiceHost(it) },
-            label = { Text("IP-Adresse des PCs") },
-            placeholder = { Text("192.168.178.41") },
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-            modifier = Modifier.weight(1f),
-        )
-        OutlinedTextField(
-            value = portText,
-            onValueChange = { t ->
-                portText = t.filter { it.isDigit() }.take(5)
-                portText.toIntOrNull()?.takeIf { it in 1..65535 }?.let { vm.changeVoicePort(it) }
-            },
-            label = { Text("Port") },
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            modifier = Modifier.width(120.dp),
-        )
-    }
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Button(onClick = { vm.testVoiceServer() }, enabled = vm.voiceStatus !is VoiceServerStatus.Testing) { Text("Verbindung testen") }
-        Spacer(Modifier.width(12.dp))
-        when (val st = vm.voiceStatus) {
-            VoiceServerStatus.Untested -> Text("Noch nicht getestet", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            VoiceServerStatus.Testing -> CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-            is VoiceServerStatus.Ok -> Text(
-                "Verbunden · ${if (st.device == "cuda") "Grafikkarte" else st.device} · ${st.voices.size} Stimmen",
-                fontSize = 13.sp,
-                color = MaterialTheme.colorScheme.secondary,
-            )
-            is VoiceServerStatus.Failed -> {}
-        }
-    }
-    (vm.voiceStatus as? VoiceServerStatus.Failed)?.let { Text(it.message, fontSize = 13.sp, color = MaterialTheme.colorScheme.error) }
 }
 
 /** Hinweis nach einem Absturz beim Laden */

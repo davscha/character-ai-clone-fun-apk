@@ -26,8 +26,6 @@ import de.davscha.characterfun.engine.OllamaClient
 import de.davscha.characterfun.engine.OllamaEngine
 import de.davscha.characterfun.engine.OllamaModel
 import de.davscha.characterfun.engine.Speaker
-import de.davscha.characterfun.engine.VoiceServerClient
-import de.davscha.characterfun.data.VoiceMode
 import de.davscha.characterfun.model.ModelCatalog
 import de.davscha.characterfun.model.ModelDownloader
 import de.davscha.characterfun.model.ModelInfo
@@ -63,14 +61,6 @@ sealed interface OllamaStatus {
     data object Testing : OllamaStatus
     data class Ok(val version: String, val models: List<OllamaModel>) : OllamaStatus
     data class Failed(val message: String) : OllamaStatus
-}
-
-/** Ergebnis des Tests beim Stimmen-Server */
-sealed interface VoiceServerStatus {
-    data object Untested : VoiceServerStatus
-    data object Testing : VoiceServerStatus
-    data class Ok(val device: String, val voices: List<String>) : VoiceServerStatus
-    data class Failed(val message: String) : VoiceServerStatus
 }
 
 /** Die Seiten der App */
@@ -487,12 +477,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** Id der Nachricht, die gerade vorgelesen wird (null = still) */
     var speakingId by mutableStateOf<String?>(null)
         private set
-    private val speaker = Speaker(app) { id ->
-        viewModelScope.launch(Dispatchers.Main) {
-            // "Fertig"-Meldungen der Android-Stimme nicht über eine laufende geklonte Stimme schreiben
-            if (id != null || (cloneJob == null && player == null)) speakingId = id
-        }
-    }
+    private val speaker = Speaker(
+        app,
+        onSpeakingChanged = { id -> viewModelScope.launch(Dispatchers.Main) { speakingId = id } },
+        onVoicesReady = { list -> viewModelScope.launch(Dispatchers.Main) { voices.clear(); voices.addAll(list) } },
+    )
 
     /** Antworten der Figur automatisch vorlesen */
     var autoRead by mutableStateOf(prefs.getBoolean("vorlesen", false))
@@ -523,94 +512,18 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun stopSpeaking() {
-        cloneJob?.cancel()
-        cloneJob = null
-        player?.run { runCatching { stop() }; release() }
-        player = null
         speaker.stop()
         speakingId = null
     }
 
-    // ---------- Geklonte Stimmen (Stimmen-Server auf dem PC) ----------
-
-    private var cloneJob: Job? = null
-    private var player: android.media.MediaPlayer? = null
-
-    var voiceHost by mutableStateOf(prefs.getString("stimmen_host", null) ?: prefs.getString("ollama_host", "") ?: "")
-        private set
-    var voicePort by mutableStateOf(prefs.getInt("stimmen_port", 8020))
-        private set
-    var voiceStatus by mutableStateOf<VoiceServerStatus>(VoiceServerStatus.Untested)
-        private set
-
-    fun changeVoiceHost(host: String) {
-        voiceHost = host.trim()
-        prefs.edit().putString("stimmen_host", voiceHost).apply()
-        voiceStatus = VoiceServerStatus.Untested
-    }
-
-    fun changeVoicePort(port: Int) {
-        voicePort = port
-        prefs.edit().putInt("stimmen_port", port).apply()
-        voiceStatus = VoiceServerStatus.Untested
-    }
-
-    fun testVoiceServer() {
-        if (voiceHost.isBlank()) {
-            voiceStatus = VoiceServerStatus.Failed("Bitte die IP-Adresse des PCs eintragen.")
-            return
-        }
-        voiceStatus = VoiceServerStatus.Testing
-        viewModelScope.launch {
-            voiceStatus = try {
-                val info = VoiceServerClient(voiceHost, voicePort).status()
-                VoiceServerStatus.Ok(info.device, info.voices)
-            } catch (e: Exception) {
-                VoiceServerStatus.Failed("Nicht erreichbar – läuft stimmen_server.py auf dem PC? (${e.message ?: e.javaClass.simpleName})")
-            }
-        }
-    }
-
-    /** Stimmprobe für eine Figur hochladen. Gibt eine Meldung für den Editor zurück. */
-    suspend fun uploadVoiceSample(characterId: String, audio: ByteArray): String {
-        if (voiceHost.isBlank()) return "Erst in den Einstellungen den Stimmen-Server eintragen."
-        return try {
-            val seconds = VoiceServerClient(voiceHost, voicePort).upload(characterId, audio)
-            "Stimmprobe gespeichert ✓ (%.1f s)".format(seconds)
-        } catch (e: Exception) {
-            "Hochladen fehlgeschlagen: ${e.message ?: e.javaClass.simpleName}"
-        }
-    }
-
-    /** Vorlesen: geklonte Stimme vom PC, falls eingestellt – sonst (oder bei Fehler) die Android-Stimme. */
+    /** Vorlesen mit der Android-Stimme der Figur */
     private fun say(id: String, text: String, c: Character) {
         stopSpeaking()
-        val clean = Speaker.cleanForSpeech(text)
-        if (clean.isEmpty()) return
-        if (c.voiceMode != VoiceMode.KLON || voiceHost.isBlank()) {
-            speaker.speak(id, text, c.voicePitch, c.voiceRate)
-            return
-        }
-        speakingId = id
-        cloneJob = viewModelScope.launch {
-            try {
-                val wav = VoiceServerClient(voiceHost, voicePort).speak(clean, c.id, c.voiceExpression)
-                val file = File(context.cacheDir, "stimme-$id.wav").apply { writeBytes(wav) }
-                player = android.media.MediaPlayer().apply {
-                    setDataSource(file.absolutePath)
-                    setOnCompletionListener { if (speakingId == id) speakingId = null }
-                    prepare()
-                    start()
-                }
-            } catch (e: kotlinx.coroutines.CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                // PC aus oder keine Stimmprobe – dann eben mit der Android-Stimme
-                speakingId = null
-                speaker.speak(id, text, c.voicePitch, c.voiceRate)
-            }
-        }
+        speaker.speak(id, text, c.voicePitch, c.voiceRate, c.voiceName)
     }
+
+    /** Alle Stimmen der Android-Sprachausgabe (für die Auswahl im Editor) */
+    val voices = mutableStateListOf<de.davscha.characterfun.engine.VoiceInfo>()
 
     // ---------- Bild für die nächste Nachricht ----------
 
@@ -1086,7 +999,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     override fun onCleared() {
-        player?.release()
         speaker.shutdown()
         internalEngine.close()
         ollamaEngine.close()

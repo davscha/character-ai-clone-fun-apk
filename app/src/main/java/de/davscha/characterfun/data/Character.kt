@@ -22,9 +22,6 @@ enum class ReplyLength(val label: String, val rule: String) {
     LANG("Lang", "Antworte ausführlich mit fünf bis acht Sätzen und beschreibe dabei auch die Szene."),
 }
 
-/** Womit die Figur vorliest */
-enum class VoiceMode { ANDROID, KLON }
-
 /** Eine Figur – alle Felder aus dem character.ai-Editor, die für die App Sinn ergeben. */
 data class Character(
     val id: String = UUID.randomUUID().toString(),
@@ -51,13 +48,11 @@ data class Character(
     val replyLength: ReplyLength = ReplyLength.MITTEL,
     /** Id des Lieblingsmodells; leer = das Modell aus den Einstellungen */
     val preferredModelId: String = "",
-    /** Vorlesen: Stimmlage (0.5 tief … 2.0 hoch) und Tempo (0.5 langsam … 2.0 schnell) */
+    /** Vorlesen: Stimmlage (0.25 sehr tief … 3.0 sehr hoch) und Tempo (0.25 langsam … 3.0 schnell) */
     val voicePitch: Float = 1.0f,
     val voiceRate: Float = 1.0f,
-    /** Android-Stimme oder geklonte Stimme vom Stimmen-Server */
-    val voiceMode: VoiceMode = VoiceMode.ANDROID,
-    /** Ausdrucksstärke der geklonten Stimme (0.25 ruhig … 1.0 sehr lebhaft) */
-    val voiceExpression: Float = 0.5f,
+    /** Name der Android-Stimme (leer = Standardstimme für Deutsch) */
+    val voiceName: String = "",
 ) {
     fun toJson(): JSONObject = JSONObject()
         .put("id", id)
@@ -76,8 +71,7 @@ data class Character(
         .put("preferredModel", preferredModelId)
         .put("voicePitch", voicePitch.toDouble())
         .put("voiceRate", voiceRate.toDouble())
-        .put("voiceMode", voiceMode.name)
-        .put("voiceExpression", voiceExpression.toDouble())
+        .put("voiceName", voiceName)
 
     companion object {
         fun fromJson(o: JSONObject) = Character(
@@ -98,8 +92,7 @@ data class Character(
             preferredModelId = o.optString("preferredModel"),
             voicePitch = o.optDouble("voicePitch", 1.0).toFloat(),
             voiceRate = o.optDouble("voiceRate", 1.0).toFloat(),
-            voiceMode = runCatching { VoiceMode.valueOf(o.optString("voiceMode")) }.getOrDefault(VoiceMode.ANDROID),
-            voiceExpression = o.optDouble("voiceExpression", 0.5).toFloat(),
+            voiceName = o.optString("voiceName"),
         )
     }
 }

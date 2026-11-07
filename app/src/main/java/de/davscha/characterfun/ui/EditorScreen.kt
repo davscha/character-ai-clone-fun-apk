@@ -1,18 +1,18 @@
 package de.davscha.characterfun.ui
 
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.MenuAnchorType
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExperimentalMaterial3Api
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
-import de.davscha.characterfun.engine.WavRecorder
-import de.davscha.characterfun.data.VoiceMode
 import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material.icons.filled.Mic
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.platform.LocalContext
-import androidx.core.content.ContextCompat
-import android.content.pm.PackageManager
-import android.Manifest
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -333,114 +333,85 @@ private fun AiBox(vm: AppViewModel, current: Character, onGenerated: (Character)
     }
 }
 
-/** Stimme beim Vorlesen: Android-Stimme (Tonhöhe, Tempo) oder geklonte Stimme vom PC. */
-@OptIn(ExperimentalLayoutApi::class)
+/** Stimme beim Vorlesen: Android-Stimme, Tonhöhe und Tempo. */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun VoiceSection(vm: AppViewModel, c: Character, onChange: (Character) -> Unit) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val recorder = remember { WavRecorder() }
-    var recording by remember { mutableStateOf(false) }
-    var seconds by remember { mutableStateOf(0f) }
-    var uploadMsg by remember { mutableStateOf<String?>(null) }
-    var uploading by remember { mutableStateOf(false) }
-
-    fun upload(bytes: ByteArray) {
-        uploading = true
-        uploadMsg = null
-        scope.launch {
-            uploadMsg = vm.uploadVoiceSample(c.id, bytes)
-            uploading = false
-        }
-    }
-
-    // Sekunden-Anzeige während der Aufnahme; nach 20 s stoppt der Recorder von selbst
-    LaunchedEffect(recording) {
-        while (recording) {
-            seconds = recorder.seconds
-            if (!recorder.isRunning) {
-                recording = false
-                upload(recorder.stop())
-            }
-            kotlinx.coroutines.delay(200)
-        }
-    }
-    DisposableEffect(Unit) { onDispose { if (recorder.isRunning) recorder.stop() } }
-
-    val askMic = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) { recorder.start(); recording = true } else uploadMsg = "Ohne Mikrofon-Erlaubnis keine Aufnahme."
-    }
-    val pickAudio = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) scope.launch {
-            val bytes = withContext(Dispatchers.IO) { context.contentResolver.openInputStream(uri)?.use { it.readBytes() } }
-            if (bytes != null) upload(bytes)
-        }
-    }
+    var allLanguages by remember { mutableStateOf(vm.voices.firstOrNull { it.name == c.voiceName }?.isGerman == false) }
+    var expanded by remember { mutableStateOf(false) }
+    val shown = vm.voices.filter { allLanguages || it.isGerman }
+    val current = vm.voices.firstOrNull { it.name == c.voiceName }
 
     Text("Stimme beim Vorlesen", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        FilterChip(selected = c.voiceMode == VoiceMode.ANDROID, onClick = { onChange(c.copy(voiceMode = VoiceMode.ANDROID)) }, label = { Text("Android-Stimme") })
-        FilterChip(selected = c.voiceMode == VoiceMode.KLON, onClick = { onChange(c.copy(voiceMode = VoiceMode.KLON)) }, label = { Text("Geklont (PC)") })
+    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
+        OutlinedTextField(
+            value = current?.label ?: "Standardstimme (Deutsch)",
+            onValueChange = {},
+            readOnly = true,
+            label = { Text("Stimme") },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryNotEditable),
+        )
+        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            DropdownMenuItem(
+                text = { Text("Standardstimme (Deutsch)") },
+                onClick = { onChange(c.copy(voiceName = "")); expanded = false },
+            )
+            shown.forEach { v ->
+                DropdownMenuItem(
+                    text = { Text(v.label, fontWeight = if (v.name == c.voiceName) FontWeight.SemiBold else FontWeight.Normal) },
+                    onClick = {
+                        val updated = c.copy(voiceName = v.name)
+                        onChange(updated)
+                        expanded = false
+                        vm.previewVoice(updated) // gleich reinhören
+                    },
+                )
+            }
+        }
     }
-
-    if (c.voiceMode == VoiceMode.ANDROID) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Tonhöhe", fontSize = 13.sp, modifier = Modifier.width(80.dp))
-            Slider(value = c.voicePitch, onValueChange = { onChange(c.copy(voicePitch = (it * 20).toInt() / 20f)) }, valueRange = 0.5f..2.0f, modifier = Modifier.weight(1f))
-            Text("%.2f".format(c.voicePitch), fontSize = 13.sp, modifier = Modifier.width(48.dp))
-        }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Tempo", fontSize = 13.sp, modifier = Modifier.width(80.dp))
-            Slider(value = c.voiceRate, onValueChange = { onChange(c.copy(voiceRate = (it * 20).toInt() / 20f)) }, valueRange = 0.5f..2.0f, modifier = Modifier.weight(1f))
-            Text("%.2f".format(c.voiceRate), fontSize = 13.sp, modifier = Modifier.width(48.dp))
-        }
-    } else {
-        if (vm.voiceHost.isBlank()) {
-            Text("Erst in den Einstellungen den Stimmen-Server eintragen.", fontSize = 13.sp, color = MaterialTheme.colorScheme.error)
-        }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Checkbox(checked = allLanguages, onCheckedChange = { allLanguages = it })
         Text(
-            "10–15 Sekunden deutlich sprechen, am besten so, wie die Figur klingen soll – z. B. die Begrüßung vorlesen. " +
-                "Nur eigene Stimmen oder die von Leuten, die einverstanden sind.",
+            "Auch Stimmen anderer Sprachen zeigen – liest Deutsch mit Akzent, z. B. eine englische oder französische Stimme",
             fontSize = 12.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (recording) {
-                Button(onClick = { recording = false; upload(recorder.stop()) }) {
-                    Icon(Icons.Default.Stop, null)
-                    Spacer(Modifier.width(6.dp))
-                    Text("Stopp (%.0f s)".format(seconds))
-                }
-            } else {
-                Button(
-                    onClick = {
-                        uploadMsg = null
-                        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
-                            recorder.start(); recording = true
-                        } else askMic.launch(Manifest.permission.RECORD_AUDIO)
-                    },
-                    enabled = !uploading && vm.voiceHost.isNotBlank(),
-                ) {
-                    Icon(Icons.Default.Mic, null)
-                    Spacer(Modifier.width(6.dp))
-                    Text("Aufnehmen")
-                }
-                OutlinedButton(onClick = { pickAudio.launch(arrayOf("audio/*")) }, enabled = !uploading && vm.voiceHost.isNotBlank()) {
-                    Text("Audiodatei wählen")
-                }
-            }
-            if (uploading) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-        }
-        uploadMsg?.let { Text(it, fontSize = 13.sp, color = if (it.contains("✓")) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.error) }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Ausdruck", fontSize = 13.sp, modifier = Modifier.width(80.dp))
-            Slider(value = c.voiceExpression, onValueChange = { onChange(c.copy(voiceExpression = (it * 20).toInt() / 20f)) }, valueRange = 0.25f..1.0f, modifier = Modifier.weight(1f))
-            Text("%.2f".format(c.voiceExpression), fontSize = 13.sp, modifier = Modifier.width(48.dp))
-        }
     }
-    OutlinedButton(onClick = { vm.previewVoice(c) }) {
-        Icon(Icons.AutoMirrored.Filled.VolumeUp, null)
-        Spacer(Modifier.width(8.dp))
-        Text("Probe hören")
+    if (vm.voices.none { it.isGerman }) {
+        Text(
+            "Keine deutsche Stimme gefunden – in den Android-Einstellungen unter \"Text-in-Sprache-Ausgabe\" Stimmdaten für Deutsch installieren.",
+            fontSize = 12.sp,
+            color = MaterialTheme.colorScheme.error,
+        )
+    }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text("Tonhöhe", fontSize = 13.sp, modifier = Modifier.width(80.dp))
+        Slider(
+            value = c.voicePitch,
+            onValueChange = { onChange(c.copy(voicePitch = (it * 20).toInt() / 20f)) },
+            valueRange = 0.25f..3.0f,
+            modifier = Modifier.weight(1f),
+        )
+        Text("%.2f".format(c.voicePitch), fontSize = 13.sp, modifier = Modifier.width(48.dp))
+    }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text("Tempo", fontSize = 13.sp, modifier = Modifier.width(80.dp))
+        Slider(
+            value = c.voiceRate,
+            onValueChange = { onChange(c.copy(voiceRate = (it * 20).toInt() / 20f)) },
+            valueRange = 0.25f..3.0f,
+            modifier = Modifier.weight(1f),
+        )
+        Text("%.2f".format(c.voiceRate), fontSize = 13.sp, modifier = Modifier.width(48.dp))
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedButton(onClick = { vm.previewVoice(c) }) {
+            Icon(Icons.AutoMirrored.Filled.VolumeUp, null)
+            Spacer(Modifier.width(8.dp))
+            Text("Probe hören")
+        }
+        TextButton(onClick = { onChange(c.copy(voicePitch = 1f, voiceRate = 1f)) }) { Text("Tonhöhe und Tempo zurücksetzen") }
     }
 }
