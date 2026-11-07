@@ -295,7 +295,7 @@ fun ChatScreen(vm: AppViewModel) {
                     val isLast = i == vm.messages.lastIndex
                     val streaming = vm.isGenerating && isLast
                     // Neu würfeln geht bei der letzten Antwort, wenn davor eine Nachricht von dir steht
-                    val canReroll = isLast && !msg.fromUser && i > 0 && vm.messages[i - 1].fromUser
+                    val canReroll = isLast && !msg.fromUser && msg.image.isEmpty() && i > 0 && vm.messages[i - 1].fromUser && !vm.messages[i - 1].note
                     MessageBubble(
                         c, avatarFile, msg, streaming, if (canReroll) vm else null, vm.summarizing,
                         busy = vm.isGenerating || vm.suggesting,
