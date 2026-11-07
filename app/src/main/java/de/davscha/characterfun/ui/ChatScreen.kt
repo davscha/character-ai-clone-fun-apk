@@ -439,7 +439,7 @@ private fun MessageBubble(
 
 /** *Handlungen zwischen Sternchen* werden kursiv und etwas blasser angezeigt, wie bei character.ai. */
 @Composable
-private fun roleplayText(text: String): androidx.compose.ui.text.AnnotatedString {
+internal fun roleplayText(text: String): androidx.compose.ui.text.AnnotatedString {
     val dim = MaterialTheme.colorScheme.onSurfaceVariant
     return androidx.compose.ui.text.buildAnnotatedString {
         val parts = text.split('*')

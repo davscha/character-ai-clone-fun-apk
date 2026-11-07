@@ -97,6 +97,26 @@ class CharacterRepository(private val context: Context) {
         return c
     }
 
+    // ---------- Rooms: eine Datei pro Raum in Rooms/ ----------
+
+    private val roomsDir: File get() = File(dataDir, "Rooms").apply { mkdirs() }
+
+    fun loadRooms(): List<Room> =
+        roomsDir.listFiles { f -> f.name.endsWith(".json") }
+            ?.mapNotNull { f -> runCatching { Room.fromJson(JSONObject(f.readText())) }.getOrNull() }
+            ?.sortedByDescending { it.updatedAt }
+            ?: emptyList()
+
+    fun saveRoom(room: Room) {
+        val tmp = File(roomsDir, "${room.id}.json.tmp")
+        tmp.writeText(room.toJson().toString(2))
+        tmp.renameTo(File(roomsDir, "${room.id}.json"))
+    }
+
+    fun deleteRoom(id: String) {
+        File(roomsDir, "$id.json").delete()
+    }
+
     // ---------- Chats: eine Datei pro Figur in Chats/ ----------
 
     private val chatsDir: File get() = File(dataDir, "Chats").apply { mkdirs() }

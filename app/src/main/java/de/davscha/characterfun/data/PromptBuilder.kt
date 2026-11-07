@@ -50,6 +50,21 @@ object PromptBuilder {
         append("- Handlungen und Gesten schreibst du zwischen Sternchen, z. B. *grinst*.")
     }
 
+    // ---------- Rooms (Gruppenchat) ----------
+
+    /** Anweisung für eine Figur im Gruppenchat: ihre Rolle plus wer sonst noch da ist. */
+    fun buildForRoom(c: Character, others: List<Character>, scenario: String, aboutUser: String): String = buildString {
+        append(build(c, aboutUser))
+        appendLine()
+        appendLine()
+        appendLine("Gruppenchat:")
+        appendLine("- Außer dir sind im Gespräch: ${others.joinToString { "${it.name} (${it.shortDescription.ifBlank { "eine Figur" }})" }} und der Nutzer.")
+        if (scenario.isNotBlank()) appendLine("- Ort und Situation: ${scenario.trim()}")
+        appendLine("- Nachrichten der anderen stehen mit ihrem Namen davor, z. B. \"${others.firstOrNull()?.name ?: "Figur"}: …\".")
+        appendLine("- Antworte nur als ${c.name}. Schreibe nie für die anderen und setze deinen eigenen Namen nicht vor die Antwort.")
+        append("- Du darfst die anderen direkt ansprechen und auf sie reagieren.")
+    }
+
     // ---------- Zusammenfassung älterer Nachrichten ----------
 
     const val SUMMARY_SYSTEM =

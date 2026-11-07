@@ -159,6 +159,36 @@ fun GalleryScreen(vm: AppViewModel) {
                 }
             }
 
+            // Rooms: mehrere Figuren in einem Chat
+            if (query.isBlank()) {
+                Text(
+                    tr("Rooms"),
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(start = 24.dp, top = 4.dp, bottom = 8.dp),
+                )
+                LazyRow(
+                    contentPadding = PaddingValues(horizontal = 24.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.padding(bottom = 16.dp),
+                ) {
+                    items(vm.rooms, key = { it.id }) { r -> RoomCard(vm, r) }
+                    item {
+                        Card(
+                            onClick = { vm.navigate(Screen.RoomEditor(null)) },
+                            shape = RoundedCornerShape(14.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                            modifier = Modifier.width(200.dp).height(72.dp),
+                        ) {
+                            Row(Modifier.fillMaxSize().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Add, null, tint = MaterialTheme.colorScheme.primary)
+                                Spacer(Modifier.width(8.dp))
+                                Text(tr("Raum erstellen"), color = MaterialTheme.colorScheme.primary)
+                            }
+                        }
+                    }
+                }
+            }
+
             // Kategorie-Tabs
             LazyRow(
                 contentPadding = PaddingValues(horizontal = 24.dp),
@@ -309,6 +339,37 @@ private fun RecentChatCard(vm: AppViewModel, c: Character, preview: String) {
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun RoomCard(vm: AppViewModel, r: de.davscha.characterfun.data.Room) {
+    val members = vm.roomMembers(r)
+    val last = r.messages.lastOrNull()
+    val preview = when {
+        last == null -> members.joinToString(", ") { it.name }
+        last.fromUser -> tr("Du: %s", last.text)
+        else -> "${vm.character(last.speakerId)?.name ?: "?"}: ${last.text}"
+    }
+    Card(
+        onClick = { vm.openRoom(r) },
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        modifier = Modifier.width(300.dp).height(72.dp),
+    ) {
+        Row(Modifier.fillMaxSize().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            // Avatare leicht überlappend
+            Box(Modifier.width((28 + 18 * (members.size.coerceAtMost(4) - 1).coerceAtLeast(0)).dp)) {
+                members.take(4).forEachIndexed { i, c ->
+                    Box(Modifier.padding(start = (18 * i).dp)) { Avatar(c, vm.repo.avatar(c), size = 28.dp) }
+                }
+            }
+            Spacer(Modifier.width(12.dp))
+            Column {
+                Text(r.name.ifBlank { tr("Raum") }, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(preview, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
         }
     }

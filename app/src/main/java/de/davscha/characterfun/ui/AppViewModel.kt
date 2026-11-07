@@ -18,6 +18,8 @@ import androidx.lifecycle.viewModelScope
 import de.davscha.characterfun.data.Character
 import de.davscha.characterfun.data.ChatMessage
 import de.davscha.characterfun.data.SavedChat
+import de.davscha.characterfun.data.Room
+import de.davscha.characterfun.data.RoomMessage
 import de.davscha.characterfun.data.CharacterRepository
 import de.davscha.characterfun.data.PromptBuilder
 import de.davscha.characterfun.data.ProfileGenerator
@@ -73,6 +75,9 @@ sealed interface Screen {
     data class Chat(val characterId: String) : Screen
     /** characterId = null: neue Figur */
     data class Editor(val characterId: String?) : Screen
+    data class Room(val roomId: String) : Screen
+    /** roomId = null: neuer Raum */
+    data class RoomEditor(val roomId: String?) : Screen
 }
 
 class AppViewModel(app: Application) : AndroidViewModel(app) {
@@ -187,8 +192,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** false = es gibt nichts mehr zurück, App darf sich schließen */
     fun back(): Boolean {
-        if (screen is Screen.Chat) {
+        if (screen is Screen.Chat || screen is Screen.Room) {
             stop()
+            roomJob?.cancel()
             stopSpeaking()
         }
         screen = backStack.removeLastOrNull() ?: return false
@@ -225,6 +231,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     // ---------- Figuren ----------
 
     val characters = mutableStateListOf<Character>()
+
+    /** Alle Räume (Gruppenchats), neueste zuerst */
+    val rooms = mutableStateListOf<Room>()
 
     /** Chats für "Weiter chatten", neueste zuerst */
     val recentChats = mutableStateListOf<SavedChat>()
@@ -289,6 +298,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             characters.addAll(repo.load())
         }
         refreshRecentChats()
+        rooms.clear()
+        rooms.addAll(repo.loadRooms())
     }
 
     /** Schon geladene Modelle aus dem internen Ordner übernehmen, statt sie neu herunterzuladen. */
@@ -649,6 +660,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         summarizedUpTo = 0
         if (memories.isNotEmpty()) saveChat()
         refreshRecentChats()
+        rooms.clear()
+        rooms.addAll(repo.loadRooms())
         needsRebuild = true
         prepareConversation()
     }
@@ -983,6 +996,177 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             throw e
         }
         return ProfileGenerator.parse(answer.toString(), base)
+    }
+
+    // ---------- Rooms (Gruppenchat) ----------
+
+    var currentRoom by mutableStateOf<Room?>(null)
+        private set
+    /** true, solange Figuren im Raum antworten */
+    var roomBusy by mutableStateOf(false)
+        private set
+    /** Wer im Raum gerade schreibt */
+    var roomSpeakerId by mutableStateOf<String?>(null)
+        private set
+    private var roomJob: Job? = null
+
+    fun room(id: String) = rooms.firstOrNull { it.id == id }
+    fun roomMembers(r: Room) = r.memberIds.mapNotNull { character(it) }
+
+    /** Das Modell für Räume: aus den Einstellungen (Lieblingsmodelle gelten hier nicht) */
+    private val defaultModel: ModelInfo get() = if (useOllama) ollamaModelInfo ?: selectedModel else selectedModel
+
+    fun saveRoom(r: Room) {
+        val updated = r.copy(updatedAt = System.currentTimeMillis())
+        val i = rooms.indexOfFirst { it.id == r.id }
+        if (i >= 0) rooms[i] = updated else rooms.add(0, updated)
+        if (currentRoom?.id == r.id) currentRoom = updated
+        viewModelScope.launch(Dispatchers.IO) { repo.saveRoom(updated) }
+    }
+
+    fun deleteRoom(id: String) {
+        rooms.removeAll { it.id == id }
+        backStack.removeAll { it is Screen.Room && it.roomId == id }
+        viewModelScope.launch(Dispatchers.IO) { repo.deleteRoom(id) }
+    }
+
+    fun openRoom(r: Room) {
+        stop()
+        stopSpeaking()
+        currentRoom = r
+        navigate(Screen.Room(r.id))
+    }
+
+    /** Neuer Anfang im Raum: Nachrichten löschen, Figuren und Szene bleiben. */
+    fun clearRoom() {
+        val r = currentRoom ?: return
+        stopRoom()
+        saveRoom(r.copy(messages = emptyList()))
+    }
+
+    /** Deine Nachricht – danach antworten alle Figuren einmal, in zufälliger Reihenfolge. */
+    fun sendToRoom(text: String) {
+        val r = currentRoom ?: return
+        val t = text.trim()
+        if (t.isEmpty() || roomBusy) return
+        currentRoom = r.copy(messages = r.messages + RoomMessage("", t))
+        runRoomTurns(roomMembers(r).shuffled())
+    }
+
+    /** Eine Figur sagt etwas, ohne dass du schreibst – [speakerId] = null: wer als Nächstes dran ist. */
+    fun roomContinue(speakerId: String? = null) {
+        val r = currentRoom ?: return
+        if (roomBusy) return
+        val members = roomMembers(r)
+        if (members.isEmpty()) return
+        val next = speakerId?.let { id -> members.firstOrNull { it.id == id } } ?: run {
+            // Reihum: nach der Figur, die zuletzt gesprochen hat
+            val lastIdx = members.indexOfFirst { it.id == r.messages.lastOrNull { m -> !m.fromUser }?.speakerId }
+            members[(lastIdx + 1) % members.size]
+        }
+        runRoomTurns(listOf(next))
+    }
+
+    fun stopRoom() {
+        roomJob?.cancel()
+        engine.stop()
+    }
+
+    private fun runRoomTurns(speakers: List<Character>) {
+        roomBusy = true
+        roomJob = viewModelScope.launch {
+            try {
+                if (engineState !is EngineState.Ready) {
+                    if (preparing) chatJob?.join()
+                    if (engineState !is EngineState.Ready) ensureModelLoaded(defaultModel)
+                }
+                for (c in speakers) generateRoomTurn(c)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                // Stopp gedrückt oder Raum verlassen
+            } catch (e: Exception) {
+                // Steht dann als Hinweis über dem Eingabefeld
+                engineState = EngineState.Failed(e.message ?: tr("Modell konnte nicht geladen werden"))
+            } finally {
+                roomBusy = false
+                roomSpeakerId = null
+                currentRoom?.let { saveRoom(it) }
+            }
+        }
+    }
+
+    /** Eine Figur antwortet im Raum. Aus ihrer Sicht sind alle anderen Nachrichten "von außen" mit Namen davor. */
+    private suspend fun generateRoomTurn(c: Character) {
+        val room = currentRoom ?: return
+        val others = roomMembers(room).filter { it.id != c.id }
+        fun nameOf(m: RoomMessage) = if (m.fromUser) "Nutzer" else character(m.speakerId)?.name ?: "?"
+
+        // Nur der neuere Teil des Gesprächs, damit er ins Gedächtnis passt
+        val recent = ArrayDeque<RoomMessage>()
+        var chars = 0
+        for (m in room.messages.asReversed()) {
+            if (chars + m.text.length > HISTORY_CHARS && recent.isNotEmpty()) break
+            recent.addFirst(m)
+            chars += m.text.length
+        }
+        // Aufeinanderfolgende Nachrichten "von außen" zu einem Block zusammenfassen
+        val turns = mutableListOf<Pair<Boolean, String>>()
+        for (m in recent) {
+            val mine = m.speakerId == c.id
+            val line = if (mine) m.text else "${nameOf(m)}: ${m.text}"
+            val last = turns.lastOrNull()
+            if (last != null && last.first == !mine) turns[turns.lastIndex] = last.first to (last.second + "\n" + line)
+            else turns += !mine to line
+        }
+        val sendText = if (turns.lastOrNull()?.first == true) turns.removeAt(turns.lastIndex).second else "(Mach weiter.)"
+
+        val prompt = PromptBuilder.buildForRoom(c, others, room.scenario, aboutUser)
+        withContext(Dispatchers.IO) { engine.startConversation(prompt, turns, temperature) }
+        needsRebuild = true // ein offener Einzelchat muss danach neu aufgebaut werden
+
+        roomSpeakerId = c.id
+        val index = room.messages.size
+        currentRoom = room.copy(messages = room.messages + RoomMessage(c.id, ""))
+        val reply = StringBuilder()
+        engine.send(sendText).collect { chunk ->
+            reply.append(chunk)
+            currentRoom?.let { r ->
+                if (index < r.messages.size) {
+                    currentRoom = r.copy(messages = r.messages.toMutableList().also { it[index] = RoomMessage(c.id, reply.toString()) })
+                }
+            }
+        }
+        // Falls die Figur doch ihren Namen davorgesetzt hat: weg damit
+        val clean = reply.toString().trim().removePrefix("${c.name}:").trim()
+        currentRoom?.let { r ->
+            if (index < r.messages.size) {
+                val list = r.messages.toMutableList()
+                if (clean.isEmpty()) list.removeAt(index) else list[index] = RoomMessage(c.id, clean)
+                currentRoom = r.copy(messages = list)
+            }
+        }
+        currentRoom?.let { saveRoom(it) }
+        // Vorlesen: erst wenn die Figur fertig gesprochen hat, ist die nächste dran
+        if (autoRead && clean.isNotEmpty()) {
+            say("raum-$index", clean, c)
+            kotlinx.coroutines.delay(400)
+            while (speakingId != null) kotlinx.coroutines.delay(200)
+        }
+    }
+
+    /** Eine Nachricht im Raum vorlesen (nochmal tippen = aufhören) */
+    fun speakRoom(index: Int) {
+        val r = currentRoom ?: return
+        val m = r.messages.getOrNull(index) ?: return
+        val c = character(m.speakerId) ?: return
+        val id = "raum-$index"
+        if (speakingId == id) { stopSpeaking(); return }
+        say(id, m.text, c)
+    }
+
+    fun deleteRoomMessage(index: Int) {
+        val r = currentRoom ?: return
+        if (roomBusy || index !in r.messages.indices) return
+        saveRoom(r.copy(messages = r.messages.toMutableList().also { it.removeAt(index) }))
     }
 
     // ---------- Gespeicherte Chats ----------
