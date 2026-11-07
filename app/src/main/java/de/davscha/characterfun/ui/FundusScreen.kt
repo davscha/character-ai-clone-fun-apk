@@ -256,7 +256,7 @@ private fun FundusItemDialog(vm: AppViewModel, kind: FundusKind, original: Fundu
                 }
                 PreviewBox(
                     vm, item.id, preview, if (kind == FundusKind.LOCATION) "🏞️" else "👗",
-                    Modifier.fillMaxWidth().heightIn(max = 320.dp).aspectRatio(1f).clip(RoundedCornerShape(12.dp)),
+                    Modifier.size(300.dp).clip(RoundedCornerShape(12.dp)),
                 )
                 vm.previewError[item.id]?.let { Text(it, fontSize = 12.sp, color = MaterialTheme.colorScheme.error) }
                 OutlinedButton(
@@ -338,7 +338,7 @@ private fun StyleDialog(vm: AppViewModel, original: StyleItem, onClose: () -> Un
                     Checkbox(checked = makeDefault, onCheckedChange = { makeDefault = it })
                     Text(tr("Standard-Stil für alle Bilder"))
                 }
-                PreviewBox(vm, style.id, preview, "🎨", Modifier.fillMaxWidth().heightIn(max = 320.dp).aspectRatio(1f).clip(RoundedCornerShape(12.dp)))
+                PreviewBox(vm, style.id, preview, "🎨", Modifier.size(300.dp).clip(RoundedCornerShape(12.dp)))
                 vm.previewError[style.id]?.let { Text(it, fontSize = 12.sp, color = MaterialTheme.colorScheme.error) }
                 OutlinedButton(
                     onClick = { vm.paintStylePreview(style.copy(preview = preview)) },

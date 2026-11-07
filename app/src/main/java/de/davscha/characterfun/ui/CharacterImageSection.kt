@@ -247,7 +247,7 @@ private fun TryOnDialog(vm: AppViewModel, c: Character, outfit: FundusItem, onAv
         title = { Text(tr("%s in „%s“", c.name, outfit.name)) },
         text = {
             Box(
-                Modifier.fillMaxWidth().heightIn(max = 520.dp).aspectRatio(1f).clip(RoundedCornerShape(12.dp))
+                Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(12.dp))
                     .background(MaterialTheme.colorScheme.surfaceVariant),
                 contentAlignment = Alignment.Center,
             ) {
