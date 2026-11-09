@@ -274,8 +274,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** true = eigener Workflow importiert, sonst eingebaute Vorlage */
     var customWorkflow by mutableStateOf(false)
         private set
-    /** LoRAs, die ComfyUI kennt (nach dem Test) */
+    /** Nicht mehr benutzt (MOSS ohne Stil-LoRAs) – bleibt leer */
     val loras = mutableStateListOf<String>()
+    /** Bildgröße in Megapixeln (ResolutionSelector im MOSS-Workflow) */
+    var megapixels by mutableStateOf(prefs.getFloat("bild_megapixel", 2f))
+        private set
+
+    fun changeMegapixels(v: Float) { megapixels = v; prefs.edit().putFloat("bild_megapixel", v).apply() }
 
     var fundus by mutableStateOf(Fundus())
         private set
@@ -1232,39 +1237,36 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         "$who: ${m.text.take(400)}"
     }.orEmpty()
 
-    /** Gemma beschreibt den aktuellen Moment als Bild-Tags (Handlung, Ausdruck, Bildausschnitt) */
+    /** Gemma beschreibt den aktuellen Moment als englisches Bild (MOSS Image versteht ganze Sätze) */
     suspend fun sceneTags(c: Character, recent: String): String {
         val answer = askHelper(
-            "Du schreibst Prompts für einen Anime-Bildgenerator im Danbooru-Tag-Stil. Du antwortest nur mit einer Komma-Liste englischer Tags, ohne Erklärung.",
+            "You write prompts for an image generator that understands natural English. You answer only with the image description, no explanation.",
             "Gesprächsende mit der Figur \"${c.name}\":\n${recent.ifBlank { "(noch nichts)" }}\n\n" +
-                "Beschreibe den aktuellen Moment, so wie ihn eine Kamera von ${c.name} einfangen würde, mit 6 bis 12 englischen Tags: " +
-                "was ${c.name} gerade tut (Pose, Handlung), Gesichtsausdruck, Blickrichtung, Bildausschnitt (z. B. upper body, cowboy shot, full body). " +
-                "KEINE Tags zu Haaren, Augen, Körper, Kleidung oder Ort – die kommen von woanders. Nur die Tags.\n\n" +
-                "Bewährte Tags zur Auswahl (nimm bevorzugt solche):\n" +
-                "Ausdruck: ${de.davscha.characterfun.data.TagLibrary.examples("pose:expression", 30)}\n" +
-                "Haltung: ${de.davscha.characterfun.data.TagLibrary.examples("pose:posture", 25)}\n" +
-                "Gesten: ${de.davscha.characterfun.data.TagLibrary.examples("pose:gesture", 20)}\n" +
-                "Kamera: ${de.davscha.characterfun.data.TagLibrary.examples("pose:camera", 20)}",
+                "Beschreibe den aktuellen Moment in 1 bis 3 englischen Sätzen, so wie ihn eine Kamera von ${c.name} einfangen würde: " +
+                "was die Figur gerade tut (Pose, Handlung), Gesichtsausdruck, Blickrichtung, Bildausschnitt, Licht. " +
+                "Schreib KEINEN Namen und nichts über Haare, Augen, Körper, Kleidung oder Ort – das ergänzt die App selbst.",
             0.5,
         )
-        return de.davscha.characterfun.data.TagLibrary.clean(answer.lines().joinToString(",") { it.trim().trimStart('-', '*', ' ') }.replace("\"", ""), de.davscha.characterfun.data.TagField.SCENE)
+        return answer.replace(Regex("```\\w*"), "").replace("**", "").trim().trim('"').replace(Regex("\\s*\\n+\\s*"), " ")
     }
 
     /** Malt die Szene mit der Figur und gibt den Pfad des Bildes zurück */
     suspend fun paintScene(c: Character, loc: FundusItem?, outfit: FundusItem?, tags: String, randomSeed: Boolean, onProgress: (Int) -> Unit): String {
-        val prompt = ImagePrompt.join("solo", c.genderTag, c.appearance, outfit?.tags, loc?.tags, tags)
+        val prompt = "${tags.trim().trimEnd('.')}. The character: ${ImagePrompt.looks(c, outfit)}." +
+            (loc?.let { " Setting: ${ImagePrompt.join(it.tags)}." } ?: "")
         val seed = c.imageSeed.takeIf { it > 0 && !randomSeed } ?: (0..999_999_999L).random()
-        val png = paint(prompt, styleFor(c), seed, "multiple views, reference sheet, character sheet", onProgress)
+        val png = paint(prompt, styleFor(c), seed, "", onProgress, aspect = ComfyClient.LANDSCAPE)
         return withContext(Dispatchers.IO) { repo.saveChatImageBytes(png) }
     }
 
-    /** Bild für „Bild als Nachricht“ malen: optional mit einer Figur darauf, sonst nur Ort + Tags */
+    /** Bild für „Bild als Nachricht“ malen: optional mit einer Figur darauf, sonst nur Ort + Beschreibung */
     suspend fun paintFree(tags: String, loc: FundusItem?, who: Character?, randomSeed: Boolean = false, onProgress: (Int) -> Unit): String {
         if (who != null) {
             val outfit = if (who.id == chatCharacter?.id) chatOutfit else clothing(who.defaultOutfitId)
             return paintScene(who, loc, outfit, tags, randomSeed = randomSeed, onProgress = onProgress)
         }
-        val png = paint(ImagePrompt.join(loc?.tags, tags), null, (0..999_999_999L).random(), "multiple views", onProgress)
+        val prompt = tags.trim().trimEnd('.') + (loc?.let { ". Setting: ${ImagePrompt.join(it.tags)}" } ?: "") + "."
+        val png = paint(prompt, null, (0..999_999_999L).random(), "", onProgress, aspect = ComfyClient.LANDSCAPE)
         return withContext(Dispatchers.IO) { repo.saveChatImageBytes(png) }
     }
 
@@ -1495,9 +1497,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 comfyStatus = comfy.test()
                 comfyOk = true
-                val list = runCatching { comfy.loras() }.getOrDefault(emptyList())
-                loras.clear()
-                loras.addAll(list)
             } catch (e: Exception) {
                 comfyOk = false
                 comfyStatus = tr("Nicht erreichbar – läuft ComfyUI mit --listen? (%s)", e.message ?: e.javaClass.simpleName)
@@ -1512,7 +1511,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val text = repo.readText(uri) ?: return@withContext tr("Datei konnte nicht gelesen werden")
         val o = runCatching { org.json.JSONObject(text) }.getOrNull() ?: return@withContext tr("Das ist keine JSON-Datei.")
         if (o.has("nodes")) return@withContext tr("Bitte in ComfyUI mit „Export (API)“ speichern – dieser Workflow ist im normalen Format.")
-        val ok = runCatching { ComfyClient.prepare(org.json.JSONObject(text), "", "", 1, null, 1f, null, null) }.isSuccess
+        val ok = runCatching { ComfyClient.prepare(org.json.JSONObject(text), "", "", 1, ComfyClient.LANDSCAPE, 2f) }.isSuccess
         if (!ok) return@withContext tr("Im Workflow fehlt ein KSampler.")
         repo.saveWorkflow(text)
         customWorkflow = true
@@ -1525,12 +1524,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Malt ein Bild: Basis + Trigger des Stils + [tags]. Gibt die PNG-Bytes zurück. */
-    suspend fun paint(tags: String, style: StyleItem? = null, seed: Long = (0..999_999_999L).random(), extraNegative: String = "", onProgress: (Int) -> Unit = {}): ByteArray {
+    suspend fun paint(
+        tags: String, style: StyleItem? = null, seed: Long = (0..999_999_999L).random(), extraNegative: String = "",
+        onProgress: (Int) -> Unit = {}, aspect: String = ComfyClient.PORTRAIT,
+    ): ByteArray {
         require(comfyConfigured) { tr("ComfyUI ist noch nicht eingerichtet (Einstellungen → Bilder).") }
         val st = style ?: fundus.defaultStyle
-        val positive = ImagePrompt.join(basePositive, st?.trigger, tags)
+        // Stil in Worten + Basis + Beschreibung (MOSS Image versteht Sätze)
+        val positive = listOf(st?.prompt, basePositive, tags).filter { !it.isNullOrBlank() }.joinToString(". ") { it!!.trim().trimEnd('.') }
         try {
-            return comfy.generate(workflowTemplate, positive, ImagePrompt.join(baseNegative, extraNegative), seed, st?.lora, st?.strength ?: 1f, onProgress = onProgress)
+            return comfy.generate(workflowTemplate, positive, ImagePrompt.join(baseNegative, extraNegative), seed, aspect, megapixels, onProgress = onProgress)
         } catch (e: java.io.IOException) {
             // PC aus oder ComfyUI beendet: Knöpfe ausgrauen, bis der nächste Test klappt
             if (e is java.net.ConnectException || e is java.net.SocketTimeoutException || e is java.net.NoRouteToHostException) {
@@ -1584,7 +1587,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             try {
                 val tags = if (kind == FundusKind.LOCATION) ImagePrompt.locationPreview(item) else ImagePrompt.clothingPreview(item)
-                val png = paint(tags, extraNegative = if (kind == FundusKind.CLOTHING) ImagePrompt.CLOTHING_PREVIEW_NEGATIVE else "")
+                val png = paint(tags, aspect = if (kind == FundusKind.CLOTHING) ComfyClient.PORTRAIT else ComfyClient.LANDSCAPE)
                 val name = withContext(Dispatchers.IO) { repo.saveFundusImage(if (kind == FundusKind.LOCATION) "ort" else "kleidung", png) }
                 val current = fundus.list(kind).firstOrNull { it.id == item.id } ?: item
                 saveFundusItem(kind, current.copy(preview = name))
@@ -1641,8 +1644,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             null -> "das Aussehen einer Figur (Haare, Augen, Körper, Merkmale – keine Kleidung)"
         }
         val answer = askHelper(
-            "Du schreibst Prompts für einen Anime-Bildgenerator im Danbooru-Tag-Stil. Du antwortest nur mit einer Komma-Liste englischer Tags, ohne Erklärung.",
-            "Beschreibung: ${description.trim()}\n\nSchreibe 6 bis 15 englische Danbooru-Tags für $what. Nur die Tags, durch Kommas getrennt.",
+            "Du beschreibst Bilder für einen Bildgenerator. Du antwortest nur mit einer Komma-Liste kurzer englischer Wortgruppen, ohne Erklärung.",
+            "Beschreibung: ${description.trim()}\n\nSchreibe 6 bis 15 kurze englische Wortgruppen (z. B. \"long wavy red hair\", \"freckles\") für $what. Nur die Liste, durch Kommas getrennt.",
             0.4,
         )
         val field = when (kind) {
@@ -1976,8 +1979,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         /** Wie viel Verlauf das Modell mitbekommt – grob 2500 Tokens, passt in 4096 mit Platz für Antworten */
         const val HISTORY_CHARS = 8000
         const val COMFY_DEFAULT_PORT = 8080
-        const val DEFAULT_POSITIVE = "masterpiece, highres"
-        const val DEFAULT_NEGATIVE = "lowres, photorealistic, photo background, multiple views"
+        const val DEFAULT_POSITIVE = "high quality, detailed"
+        const val DEFAULT_NEGATIVE = ""
     }
 
     override fun onCleared() {

@@ -156,12 +156,12 @@ fun SceneImageDialog(
                     if (allowOutfit) OutfitPicker(vm, c, vm.clothing(outfitId), enabled = !painting) { outfitId = it }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    TagInput(
+                    androidx.compose.material3.OutlinedTextField(
                         value = tags,
-                        onChange = { tags = it },
-                        label = tr("Was passiert gerade? (Tags)"),
-                        field = de.davscha.characterfun.data.TagField.SCENE,
-                        placeholder = "smile, waving, sitting, cowboy shot",
+                        onValueChange = { tags = it },
+                        label = { Text(tr("Was passiert gerade?") + " (English)") },
+                        placeholder = { Text("She waves and smiles, upper body, warm light") },
+                        minLines = 2,
                         enabled = !describing && !painting,
                         modifier = Modifier.weight(1f),
                     )

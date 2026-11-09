@@ -25,24 +25,27 @@ data class FundusItem(
     }
 }
 
-/** Ein Bildstil = eine LoRA. Das Trigger-Tag ist der Dateiname ohne Ordner und Endung. */
+/** Ein Bildstil in Worten (MOSS Image versteht Sätze), z. B. „classic Disney animation style, soft colors“ */
 data class StyleItem(
     val id: String = UUID.randomUUID().toString(),
     val name: String = "",
-    /** So, wie ComfyUI die LoRA nennt, z. B. NoobAi\PandorasBoxStyle.safetensors */
+    /** Alt (NoobAI-LoRA) – wird nicht mehr benutzt */
     val lora: String = "",
     val strength: Float = 1f,
     val preview: String = "",
+    /** Stil auf Englisch, steht vorne in jedem Bild-Prompt */
+    val prompt: String = "",
 ) {
-    val trigger: String get() = lora.substringAfterLast('\\').substringAfterLast('/').substringBeforeLast('.')
+    val trigger: String get() = prompt
 
     fun toJson(): JSONObject = JSONObject().put("id", id).put("name", name).put("lora", lora)
-        .put("staerke", strength.toDouble()).put("vorschau", preview)
+        .put("staerke", strength.toDouble()).put("vorschau", preview).put("prompt", prompt)
 
     companion object {
         fun fromJson(o: JSONObject) = StyleItem(
             o.optString("id").ifEmpty { UUID.randomUUID().toString() },
             o.optString("name"), o.optString("lora"), o.optDouble("staerke", 1.0).toFloat(), o.optString("vorschau"),
+            o.optString("prompt").ifBlank { if (o.optString("lora").isNotBlank()) "anime illustration, clean lineart, soft colors" else "" },
         )
     }
 }
@@ -69,9 +72,18 @@ data class Fundus(
             return Fundus(items("orte"), items("kleidung"), styles, o.optString("standardStil"))
         }
 
+        /** Stile für MOSS Image (in Worten) */
+        val mossStyles = listOf(
+            StyleItem(id = "stil-disney", name = "Disney-Zeichentrick", prompt = "classic Disney animation style, hand-drawn, soft colors, expressive faces"),
+            StyleItem(id = "stil-anime", name = "Anime", prompt = "anime illustration, clean lineart, vibrant colors"),
+            StyleItem(id = "stil-comic", name = "Comic", prompt = "western comic book art, bold ink outlines, flat colors"),
+            StyleItem(id = "stil-aquarell", name = "Aquarell", prompt = "soft watercolor painting, storybook illustration, gentle colors"),
+            StyleItem(id = "stil-foto", name = "Foto (realistisch)", prompt = "realistic photo, cinematic lighting, 35mm lens"),
+        )
+
         /** Startausstattung beim ersten Öffnen */
         val starter: Fundus get() {
-            val pandora = StyleItem(id = "stil-pandora", name = "Pandora's Box", lora = "NoobAi\\PandorasBoxStyle.safetensors", strength = 1f)
+            val pandora = mossStyles.first()
             return Fundus(
                 locations = listOf(
                     FundusItem(name = "Gemütliches Café", tags = "cafe, indoors, wooden table, coffee cup, warm lighting, window, cozy"),
@@ -89,7 +101,7 @@ data class Fundus(
                     FundusItem(name = "Pyjama", tags = "pajamas, striped pajamas, slippers"),
                     FundusItem(name = "Sportlich", tags = "hoodie, track pants, sneakers"),
                 ),
-                styles = listOf(pandora),
+                styles = mossStyles,
                 defaultStyleId = pandora.id,
             )
         }
@@ -105,20 +117,24 @@ object ImagePrompt {
         .distinct()
         .joinToString(", ")
 
-    fun locationPreview(item: FundusItem) = join(item.tags, "scenery, no humans")
+    /** Figur in Worten: „a woman, long red hair, green eyes, wearing brown coat“ (MOSS Image versteht Sätze) */
+    fun looks(c: Character, outfit: FundusItem?) = join(c.genderWord, c.appearance, outfit?.tags?.takeIf { it.isNotBlank() }?.let { "wearing $it" })
+
+    fun locationPreview(item: FundusItem) = "Scenery without people: ${join(item.tags)}."
     /** Eine Person als Model, eine einzige Ansicht von vorn */
-    fun clothingPreview(item: FundusItem) = join("solo", item.model, item.tags, "standing, full body, front view, looking at viewer, simple background, white background")
-    /** Zusätzlich verboten bei Kleidungs-Vorschauen: Mehrfachansichten */
-    const val CLOTHING_PREVIEW_NEGATIVE = "multiple views, reference sheet, character sheet, multiple girls, multiple boys, mannequin"
-    const val STYLE_PREVIEW = "1girl, smile, upper body, flower field, outdoors, looking at viewer"
+    fun clothingPreview(item: FundusItem) =
+        "Full body front view of a single ${if (item.model == "1boy") "man" else "young woman"} wearing ${join(item.tags)}, standing, plain white background."
+    /** MOSS hat keinen Negativ-Prompt mehr – bleibt für eigene Workflows */
+    const val CLOTHING_PREVIEW_NEGATIVE = "multiple views, reference sheet, character sheet, mannequin"
+    const val STYLE_PREVIEW = "A smiling young woman in a flower field, upper body, looking at the viewer."
 
     /** Vorschau des Aussehens: Oberkörper, Gesicht gut zu sehen */
     fun appearancePreview(c: Character, outfit: FundusItem?) =
-        join("solo", c.genderTag, c.appearance, outfit?.tags, "upper body, looking at viewer, smile, simple background")
+        "Portrait of a single character: ${looks(c, outfit)}. Upper body, smiling, looking at the viewer, plain background."
 
     /** Anprobieren: die Figur in einem Outfit, ganzer Körper, eine Ansicht */
     fun tryOn(c: Character, outfit: FundusItem) =
-        join("solo", c.genderTag, c.appearance, outfit.tags, "standing, full body, front view, looking at viewer, simple background, white background")
+        "Full body front view of a single character: ${looks(c, outfit)}. Standing, looking at the viewer, plain white background."
 }
 
 /** Welche Liste im Fundus */

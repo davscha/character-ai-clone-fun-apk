@@ -123,8 +123,8 @@ fun FundusScreen(vm: AppViewModel) {
                 if (tab == 2) {
                     items(vm.fundus.styles, key = { it.id }) { s ->
                         FundusCard(
-                            vm, s.id, s.preview, "🎨", s.name.ifBlank { s.trigger },
-                            tr("Trigger: %s · Stärke %.1f", s.trigger, s.strength),
+                            vm, s.id, s.preview, "🎨", s.name.ifBlank { s.prompt.take(30) },
+                            s.prompt,
                             isDefault = vm.fundus.defaultStyle?.id == s.id,
                         ) { editStyle = s }
                     }
@@ -284,7 +284,7 @@ private fun FundusItemDialog(vm: AppViewModel, kind: FundusKind, original: Fundu
     )
 }
 
-/** Stil (LoRA) bearbeiten */
+/** Stil (in Worten) bearbeiten */
 @Composable
 private fun StyleDialog(vm: AppViewModel, original: StyleItem, onClose: () -> Unit) {
     var style by remember { mutableStateOf(original) }
@@ -305,35 +305,15 @@ private fun StyleDialog(vm: AppViewModel, original: StyleItem, onClose: () -> Un
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
-                // LoRA aus der Liste von ComfyUI oder von Hand
-                Box {
-                    OutlinedTextField(
-                        value = style.lora,
-                        onValueChange = { style = style.copy(lora = it) },
-                        label = { Text(tr("LoRA-Datei")) },
-                        singleLine = true,
-                        trailingIcon = {
-                            TextButton(onClick = { if (vm.loras.isEmpty()) vm.testComfy() else loraMenu = true }, enabled = vm.comfyReady || vm.loras.isEmpty()) {
-                                Text(if (vm.loras.isEmpty()) tr("Liste laden") else tr("Auswählen"))
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    DropdownMenu(expanded = loraMenu, onDismissRequest = { loraMenu = false }) {
-                        vm.loras.forEach { l ->
-                            DropdownMenuItem(text = { Text(l, fontSize = 14.sp) }, onClick = {
-                                loraMenu = false
-                                val trig = StyleItem(lora = l).trigger
-                                style = style.copy(lora = l, name = style.name.ifBlank { trig })
-                            })
-                        }
-                    }
-                }
-                if (style.lora.isNotBlank()) {
-                    Text(tr("Trigger-Tag (automatisch): %s", style.trigger), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Text(tr("Stärke: %.2f", style.strength), fontSize = 13.sp)
-                Slider(value = style.strength, onValueChange = { style = style.copy(strength = (it * 20).toInt() / 20f) }, valueRange = 0f..1.5f)
+                OutlinedTextField(
+                    value = style.prompt,
+                    onValueChange = { style = style.copy(prompt = it) },
+                    label = { Text(tr("Stil in Worten (Englisch)")) },
+                    placeholder = { Text("classic Disney animation style, soft colors") },
+                    minLines = 2,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Text(tr("Steht vorne in jedem Bild-Prompt. MOSS Image versteht ganze Sätze und Wortgruppen."), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(checked = makeDefault, onCheckedChange = { makeDefault = it })
                     Text(tr("Standard-Stil für alle Bilder"))
@@ -342,7 +322,7 @@ private fun StyleDialog(vm: AppViewModel, original: StyleItem, onClose: () -> Un
                 vm.previewError[style.id]?.let { Text(it, fontSize = 12.sp, color = MaterialTheme.colorScheme.error) }
                 OutlinedButton(
                     onClick = { vm.paintStylePreview(style.copy(preview = preview)) },
-                    enabled = vm.comfyReady && style.lora.isNotBlank() && vm.previewBusy[style.id] != true,
+                    enabled = vm.comfyReady && style.prompt.isNotBlank() && vm.previewBusy[style.id] != true,
                 ) {
                     Icon(Icons.Default.Brush, null, Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp))
@@ -352,8 +332,8 @@ private fun StyleDialog(vm: AppViewModel, original: StyleItem, onClose: () -> Un
         },
         confirmButton = {
             TextButton(
-                onClick = { vm.saveStyle(style.copy(name = style.name.trim().ifBlank { style.trigger }, preview = preview), makeDefault); onClose() },
-                enabled = style.lora.isNotBlank(),
+                onClick = { vm.saveStyle(style.copy(name = style.name.trim().ifBlank { style.prompt.take(30) }, preview = preview), makeDefault); onClose() },
+                enabled = style.prompt.isNotBlank(),
             ) { Text(tr("Speichern")) }
         },
         dismissButton = {

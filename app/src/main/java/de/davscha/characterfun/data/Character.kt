@@ -82,6 +82,13 @@ data class Character(
     /** Ort, an dem ein neues Gespräch beginnt (Id aus dem Fundus, leer = keiner) */
     val defaultLocationId: String = "",
 ) {
+    /** Geschlecht in Worten für MOSS Image */
+    val genderWord: String get() = when (gender) {
+        Gender.MALE -> "a man"
+        Gender.FEMALE -> "a woman"
+        else -> "a person"
+    }
+
     /** Geschlecht als Bild-Tag */
     val genderTag: String get() = when (gender) {
         Gender.MALE -> "1boy"

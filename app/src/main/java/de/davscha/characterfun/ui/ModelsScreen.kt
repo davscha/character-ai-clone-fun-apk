@@ -529,10 +529,12 @@ private fun ComfySettings(vm: AppViewModel) {
     OutlinedTextField(
         value = vm.basePositive,
         onValueChange = { vm.changeBasePositive(it) },
-        label = { Text(tr("Basis positiv (steht immer vorne)")) },
+        label = { Text(tr("Kommt in jeden Bild-Prompt")) },
         minLines = 2,
         modifier = Modifier.fillMaxWidth(),
     )
+    Text(tr("Bildgröße: %.1f Megapixel", vm.megapixels), fontSize = 13.sp)
+    androidx.compose.material3.Slider(value = vm.megapixels, onValueChange = { vm.changeMegapixels((it * 2).toInt() / 2f) }, valueRange = 0.5f..4f, steps = 6)
     OutlinedTextField(
         value = vm.baseNegative,
         onValueChange = { vm.changeBaseNegative(it) },
@@ -541,7 +543,7 @@ private fun ComfySettings(vm: AppViewModel) {
         modifier = Modifier.fillMaxWidth(),
     )
     Text(
-        tr("Dahinter setzt die App automatisch das Trigger-Tag des Stils (z. B. PandorasBoxStyle) und die Bausteine aus dem Fundus."),
+        tr("Workflow: MOSS Image (RealisticFreedom + 4-Step-LoRA, Qwen359B, Flux2-VAE, 6 Schritte). Vorne steht der Stil in Worten, dahinter Aussehen, Kleidung und Ort."),
         fontSize = 12.sp,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )

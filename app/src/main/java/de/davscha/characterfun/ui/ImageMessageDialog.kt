@@ -143,12 +143,12 @@ fun ImageMessageDialog(
                             }
                         }
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            TagInput(
+                            androidx.compose.material3.OutlinedTextField(
                                 value = paintTags,
-                                onChange = { paintTags = it },
-                                label = tr("Was ist zu sehen? (Tags)"),
-                                field = de.davscha.characterfun.data.TagField.ANY,
-                                placeholder = "sitting, sofa, smile, looking at viewer",
+                                onValueChange = { paintTags = it },
+                                label = { Text(tr("Was ist zu sehen?") + " (English)") },
+                                placeholder = { Text("A woman sitting on a sofa, smiling at the viewer") },
+                                minLines = 2,
                                 enabled = !painting && !suggesting,
                                 modifier = Modifier.weight(1f),
                             )

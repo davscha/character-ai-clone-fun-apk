@@ -108,7 +108,19 @@ class CharacterRepository(private val context: Context) {
     fun loadFundus(): Fundus {
         val f = fundusFile
         if (!f.exists()) return Fundus.starter.also { saveFundus(it) }
-        return runCatching { Fundus.fromJson(JSONObject(f.readText())) }.getOrElse { Fundus.starter }
+        val fu = runCatching { Fundus.fromJson(JSONObject(f.readText())) }.getOrElse { Fundus.starter }
+        // Umstieg auf MOSS Image: Stile in Worten einmalig nachliefern, Disney wird Standard statt der alten LoRA
+        val known = fu.styles.map { it.id }.toSet()
+        if (Fundus.mossStyles.none { it.id in known }) {
+            val old = fu.defaultStyle
+            val moved = fu.copy(
+                styles = Fundus.mossStyles + fu.styles,
+                defaultStyleId = if (old == null || old.lora.isNotBlank()) Fundus.mossStyles.first().id else fu.defaultStyleId,
+            )
+            saveFundus(moved)
+            return moved
+        }
+        return fu
     }
 
     fun saveFundus(fundus: Fundus) {

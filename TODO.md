@@ -90,3 +90,9 @@ Grundeinstellungen: Positiv-Basis `masterpiece, highres, PandorasBoxStyle`, Nega
 - [x] Chats speichern, „Weiter chatten“, Antworten neu würfeln mit Varianten
 - [x] Erinnerungen: „Über dich“, angeheftete Erinnerungen, automatische Zusammenfassung
 - [x] Ideen-Knopf: fünf Vorschläge für die nächste Nachricht
+
+## Runde 4 – MOSS Image (9. November 2026)
+
+- [x] **MOSS-Image-Workflow** statt NoobAI/Pandora (RealisticFreedom + 4-Step-LoRA, Qwen359B, Flux2-VAE, 6 Schritte, CFG 1), Bildgröße in Megapixeln einstellbar
+- [x] **Stile in Worten** statt LoRAs: Disney-Zeichentrick (Standard), Anime, Comic, Aquarell, Foto – eigene Stile als englischer Text
+- [x] Szenenbilder und „Bild als Nachricht“: Gemma beschreibt den Moment in englischen Sätzen, die App hängt Aussehen, Kleidung und Ort der Figur an (feste Figurenbeschreibung)
