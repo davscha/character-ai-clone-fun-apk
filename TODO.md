@@ -97,3 +97,4 @@ Grundeinstellungen: Positiv-Basis `masterpiece, highres, PandorasBoxStyle`, Nega
 - [x] **Stile in Worten** statt LoRAs: Disney-Zeichentrick (Standard), Anime, Comic, Aquarell, Foto – eigene Stile als englischer Text
 - [x] Szenenbilder und „Bild als Nachricht“: Gemma beschreibt den Moment in englischen Sätzen, die App hängt Aussehen, Kleidung und Ort der Figur an (feste Figurenbeschreibung)
 - [x] Zwei kostenlose Versionen: Pro (Ollama + ComfyUI) und Lite (nur auf dem Gerät)
+- [x] Bilder als MOSS-JSON: Aussehen in Feldern, Kleidung Teil für Teil, Ort mit Hintergrund und Licht; pose = Haltung einer Figur, action = Zusammenspiel; mehrere Figuren auf einem Bild; Stil frei (kein Anime-Zwang)

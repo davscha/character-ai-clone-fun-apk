@@ -62,6 +62,7 @@ import de.davscha.characterfun.model.sharedModelsDir
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import org.json.JSONObject
 import kotlinx.coroutines.withContext
 import java.io.File
 
@@ -1210,8 +1211,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Ort und Kleidung als Text für den Systemprompt */
     private fun sceneText(c: Character, loc: FundusItem? = chatLocation, outfit: FundusItem? = chatOutfit): String = buildString {
-        loc?.let { append("Ort: ${it.name} (${it.tags}). ") }
-        outfit?.let { append("${c.name} trägt: ${it.name} (${it.tags}).") }
+        loc?.let { append("Ort: ${it.name} (${it.text}). ") }
+        outfit?.let { append("${c.name} trägt: ${it.name} (${it.text}).") }
     }.trim()
 
     fun setChatLocation(id: String) {
@@ -1245,36 +1246,70 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         "$who: ${m.text.take(400)}"
     }.orEmpty()
 
-    /** Gemma beschreibt den aktuellen Moment als englisches Bild (MOSS Image versteht ganze Sätze) */
-    suspend fun sceneTags(c: Character, recent: String): String {
+    /** Ein Bild-Moment: Haltung und Ausdruck je Figur (Id), dazu Zusammenspiel, Kamera und Licht */
+    data class SceneMoment(
+        val poses: Map<String, ImagePrompt.Moment> = emptyMap(),
+        val action: String = "",
+        val camera: String = "",
+        val lights: String = "",
+    ) {
+        val isEmpty get() = poses.values.all { it.pose.isBlank() && it.expression.isBlank() } && action.isBlank() && camera.isBlank()
+    }
+
+    private fun jsonObject(answer: String): JSONObject? {
+        val a = answer.indexOf('{'); val b = answer.lastIndexOf('}')
+        if (a < 0 || b <= a) return null
+        return runCatching { JSONObject(answer.substring(a, b + 1)) }.getOrNull()
+    }
+
+    /**
+     * Gemma wählt den aktuellen Moment: [people] = wer auf dem Bild ist.
+     * pose = nur die Haltung EINER Figur, action = Zusammenspiel mit anderen Figuren und der Welt.
+     */
+    suspend fun sceneMoment(people: List<Character>, recent: String, loc: FundusItem?): SceneMoment {
         val answer = askHelper(
-            "You write prompts for an image generator that understands natural English. You answer only with the image description, no explanation.",
-            "Gesprächsende mit der Figur \"${c.name}\":\n${recent.ifBlank { "(noch nichts)" }}\n\n" +
-                "Beschreibe den aktuellen Moment in 1 bis 3 englischen Sätzen, so wie ihn eine Kamera von ${c.name} einfangen würde: " +
-                "was die Figur gerade tut (Pose, Handlung), Gesichtsausdruck, Blickrichtung, Bildausschnitt, Licht. " +
-                "Schreib KEINEN Namen und nichts über Haare, Augen, Körper, Kleidung oder Ort – das ergänzt die App selbst.",
+            "You plan images for an image generator. Answer only with a JSON object in English, no explanation, no markdown.",
+            "Gesprächsende:\n${recent.ifBlank { "(noch nichts)" }}\n\n" +
+                (if (people.isNotEmpty()) "Figuren im Bild: ${people.joinToString { it.name }}\n" else "Keine Personen im Bild, nur Ort, Gegenstände und Stimmung.\n") +
+                (loc?.let { "Ort: ${it.name} – ${it.text}\n" } ?: "") +
+                "\nBeschreibe den aktuellen Moment so, wie eine Kamera ihn einfangen würde. " +
+                "Regeln: \"pose\" beschreibt NUR die Körperhaltung dieser einen Figur (z. B. \"sitting on the floor, leaning back, knees up\"), ohne andere Figuren oder Gegenstände. " +
+                "\"face_expression\" ist ihr Gesichtsausdruck. \"action\" beschreibt, wie die Figuren miteinander und mit Gegenständen oder der Umgebung umgehen, mit Namen " +
+                "(z. B. \"Angus stands behind Alice, his hands rest on her shoulders\"). \"camera\" ist Bildausschnitt und Blickwinkel (z. B. \"cowboy shot, dutch angle\"). " +
+                "\"lights\" ist das Licht im Moment. Nichts über Haare, Augen, Körper oder Kleidung – das ergänzt die App. Alles auf Englisch, kurze Wortgruppen.\n" +
+                "Form:\n{\"figures\": [${people.joinToString { "{\"name\": \"${it.name}\", \"pose\": \"…\", \"face_expression\": \"…\"}" }}], " +
+                "\"action\": \"…\", \"camera\": \"…\", \"lights\": \"…\"}",
             0.5,
         )
-        return answer.replace(Regex("```\\w*"), "").replace("**", "").trim().trim('"').replace(Regex("\\s*\\n+\\s*"), " ")
-    }
-
-    /** Malt die Szene mit der Figur und gibt den Pfad des Bildes zurück */
-    suspend fun paintScene(c: Character, loc: FundusItem?, outfit: FundusItem?, tags: String, randomSeed: Boolean, onProgress: (Int) -> Unit): String {
-        val prompt = "${tags.trim().trimEnd('.')}. The character: ${ImagePrompt.looks(c, outfit)}." +
-            (loc?.let { " Setting: ${ImagePrompt.join(it.tags)}." } ?: "")
-        val seed = c.imageSeed.takeIf { it > 0 && !randomSeed } ?: (0..999_999_999L).random()
-        val png = paint(prompt, styleFor(c), seed, "", onProgress, aspect = ComfyClient.LANDSCAPE)
-        return withContext(Dispatchers.IO) { repo.saveChatImageBytes(png) }
-    }
-
-    /** Bild für „Bild als Nachricht“ malen: optional mit einer Figur darauf, sonst nur Ort + Beschreibung */
-    suspend fun paintFree(tags: String, loc: FundusItem?, who: Character?, randomSeed: Boolean = false, onProgress: (Int) -> Unit): String {
-        if (who != null) {
-            val outfit = if (who.id == chatCharacter?.id) chatOutfit else clothing(who.defaultOutfitId)
-            return paintScene(who, loc, outfit, tags, randomSeed = randomSeed, onProgress = onProgress)
+        val o = jsonObject(answer) ?: return SceneMoment(action = answer.replace(Regex("```\\w*"), "").replace("**", "").trim().trim('"'))
+        val byName = mutableMapOf<String, ImagePrompt.Moment>()
+        o.optJSONArray("figures")?.let { arr ->
+            for (k in 0 until arr.length()) arr.optJSONObject(k)?.let { f -> byName[f.optString("name").trim().lowercase()] = ImagePrompt.Moment(f.optString("pose"), f.optString("face_expression")) }
         }
-        val prompt = tags.trim().trimEnd('.') + (loc?.let { ". Setting: ${ImagePrompt.join(it.tags)}" } ?: "") + "."
-        val png = paint(prompt, null, (0..999_999_999L).random(), "", onProgress, aspect = ComfyClient.LANDSCAPE)
+        return SceneMoment(
+            poses = people.associate { it.id to (byName[it.name.trim().lowercase()] ?: ImagePrompt.Moment()) },
+            action = o.optString("action"), camera = o.optString("camera"), lights = o.optString("lights"),
+        )
+    }
+
+    /** Kleidung einer Figur im Bild: im offenen Chat die gewählte, sonst das Standard-Outfit */
+    private fun outfitOf(c: Character): FundusItem? = if (c.id == chatCharacter?.id) chatOutfit ?: clothing(c.defaultOutfitId) else clothing(c.defaultOutfitId)
+
+    /** Malt den Moment als MOSS-JSON und gibt den Pfad des Bildes zurück */
+    suspend fun paintMoment(
+        people: List<Character>, loc: FundusItem?, m: SceneMoment, randomSeed: Boolean, outfits: Map<String, FundusItem?> = emptyMap(),
+        onProgress: (Int) -> Unit,
+    ): String {
+        val style = people.firstOrNull()?.let { styleFor(it) } ?: fundus.defaultStyle
+        val figures = people.map { c -> ImagePrompt.figure(c, if (c.id in outfits) outfits[c.id] else outfitOf(c), m.poses[c.id] ?: ImagePrompt.Moment()) }
+        val prompt = ImagePrompt.build(
+            styleText(style), figures, action = m.action,
+            background = loc?.let { it.background.ifBlank { it.tags } }.orEmpty(),
+            lights = m.lights.ifBlank { loc?.lights.orEmpty() }, camera = m.camera,
+        )
+        val single = people.singleOrNull()
+        val seed = single?.imageSeed?.takeIf { it > 0 && !randomSeed } ?: (0..999_999_999L).random()
+        val png = paint(prompt, style, seed, "", onProgress, aspect = ComfyClient.LANDSCAPE)
         return withContext(Dispatchers.IO) { repo.saveChatImageBytes(png) }
     }
 
@@ -1539,7 +1574,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         require(comfyConfigured) { tr("ComfyUI ist noch nicht eingerichtet (Einstellungen → Bilder).") }
         val st = style ?: fundus.defaultStyle
         // Stil in Worten + Basis + Beschreibung (MOSS Image versteht Sätze)
-        val positive = listOf(st?.prompt, basePositive, tags).filter { !it.isNullOrBlank() }.joinToString(". ") { it!!.trim().trimEnd('.') }
+        // MOSS-JSON geht so raus, wie es ist (der Stil steht schon drin); reiner Text bekommt den Stil davor
+        val positive = if (tags.trimStart().startsWith("{")) tags
+        else listOf(st?.prompt, basePositive, tags).filter { !it.isNullOrBlank() }.joinToString(". ") { it!!.trim().trimEnd('.') }
         try {
             return comfy.generate(workflowTemplate, positive, ImagePrompt.join(baseNegative, extraNegative), seed, aspect, megapixels, onProgress = onProgress)
         } catch (e: java.io.IOException) {
@@ -1553,6 +1590,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun fundusImage(name: String) = repo.fundusImage(name)
+
+    /** Der Stil-Eintrag fürs JSON: dein Stil plus „kommt in jeden Bild-Prompt“ */
+    fun styleText(st: StyleItem?) = listOf(st?.prompt, basePositive).filter { !it.isNullOrBlank() }.joinToString(", ") { it!!.trim().trimEnd('.', ',') }
 
     private fun updateFundus(f: Fundus) {
         fundus = f
@@ -1594,7 +1634,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         previewError.remove(item.id)
         viewModelScope.launch {
             try {
-                val tags = if (kind == FundusKind.LOCATION) ImagePrompt.locationPreview(item) else ImagePrompt.clothingPreview(item)
+                val st = styleText(fundus.defaultStyle)
+                val tags = if (kind == FundusKind.LOCATION) ImagePrompt.locationPreview(st, item) else ImagePrompt.clothingPreview(st, item)
                 val png = paint(tags, aspect = if (kind == FundusKind.CLOTHING) ComfyClient.PORTRAIT else ComfyClient.LANDSCAPE)
                 val name = withContext(Dispatchers.IO) { repo.saveFundusImage(if (kind == FundusKind.LOCATION) "ort" else "kleidung", png) }
                 val current = fundus.list(kind).firstOrNull { it.id == item.id } ?: item
@@ -1614,7 +1655,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         previewError.remove(style.id)
         viewModelScope.launch {
             try {
-                val png = paint(ImagePrompt.STYLE_PREVIEW, style, seed = 7)
+                val png = paint(ImagePrompt.stylePreview(styleText(style)), style, seed = 7)
                 val name = withContext(Dispatchers.IO) { repo.saveFundusImage("stil", png) }
                 val current = fundus.styles.firstOrNull { it.id == style.id } ?: style
                 saveStyle(current.copy(preview = name))
@@ -1633,7 +1674,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Malt die Figur – [outfit] = null: Aussehens-Vorschau (mit Standard-Outfit), sonst Anprobieren. Gibt den Dateinamen zurück. */
     suspend fun paintCharacter(c: Character, outfit: FundusItem?, randomSeed: Boolean = false, onProgress: (Int) -> Unit = {}): String {
-        val tags = if (outfit == null) ImagePrompt.appearancePreview(c, clothing(c.defaultOutfitId)) else ImagePrompt.tryOn(c, outfit)
+        val st = styleText(styleFor(c))
+        val tags = if (outfit == null) ImagePrompt.appearancePreview(st, c, clothing(c.defaultOutfitId)) else ImagePrompt.tryOn(st, c, outfit)
         val seed = c.imageSeed.takeIf { it > 0 && !randomSeed } ?: (0..999_999_999L).random()
         val png = paint(tags, styleFor(c), seed, ImagePrompt.CLOTHING_PREVIEW_NEGATIVE, onProgress)
         return withContext(Dispatchers.IO) { repo.saveFundusImage("figur", png) }
@@ -1642,6 +1684,47 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** Ein gemaltes Bild als Avatar übernehmen; gibt den neuen Avatar-Dateinamen zurück */
     suspend fun adoptAvatar(imageName: String, characterId: String, fullBody: Boolean): String? = withContext(Dispatchers.IO) {
         repo.fundusImage(imageName)?.let { repo.adoptAvatar(it, characterId, fullBody) }
+    }
+
+    /** Gemma füllt das Aussehen einer Figur (Englisch) aus einer deutschen Beschreibung oder dem Steckbrief */
+    suspend fun describeLooks(c: Character, text: String): Character {
+        val about = listOf(c.shortDescription, c.longDescription).filter { it.isNotBlank() }.joinToString(". ")
+        val a = askHelper(
+            "You describe characters for an image generator. Answer only with a JSON object in English, no explanation, no markdown.",
+            "Figur: ${c.name} (${c.gender.label}). $about\nAussehen: ${text.ifBlank { "(aus dem Steckbrief ableiten oder etwas Passendes ausdenken)" }}\n\n" +
+                "Fill this JSON in English with short descriptive phrases (no clothing):\n" +
+                "{\"age\": 28, \"face\": \"angular face, high cheekbones, straight nose, full lips\", \"eyes\": \"almond-shaped green eyes, calm gaze\", " +
+                "\"body\": \"slender athletic build, average height\", \"skin\": \"fair skin, light freckles\", \"hair\": \"chin length wavy bob, dark brown\"}",
+            0.5,
+        )
+        val o = jsonObject(a) ?: throw IllegalStateException(tr("Die KI hat nichts Brauchbares geliefert. Einfach nochmal versuchen."))
+        fun f(k: String, old: String) = o.optString(k).trim().ifBlank { old }
+        return c.copy(age = f("age", c.age), face = f("face", c.face), eyes = f("eyes", c.eyes), body = f("body", c.body), skin = f("skin", c.skin), hair = f("hair", c.hair))
+    }
+
+    /** Gemma füllt Ort (Hintergrund, Licht) oder Kleidung (Teile) aus einer deutschen Beschreibung */
+    suspend fun describeFundus(kind: FundusKind, item: FundusItem, text: String): FundusItem {
+        val what = text.ifBlank { item.name }
+        if (kind == FundusKind.LOCATION) {
+            val a = askHelper(
+                "You describe locations for an image generator. Answer only with a JSON object in English, no explanation, no markdown.",
+                "Ort: $what\n\nFill this JSON in English (no people):\n{\"background\": \"vast abandoned warehouse hall, rusted steel staircase on the right, graffiti on the walls, cracked concrete floor\", " +
+                    "\"lights\": \"sunbeams through the roof windows, hazy light shafts\"}",
+                0.5,
+            )
+            val o = jsonObject(a) ?: throw IllegalStateException(tr("Die KI hat nichts Brauchbares geliefert. Einfach nochmal versuchen."))
+            return item.copy(name = item.name.ifBlank { text.trim() }, background = o.optString("background").trim().ifBlank { item.background }, lights = o.optString("lights").trim().ifBlank { item.lights })
+        }
+        val a = askHelper(
+            "You describe clothing for an image generator. Answer only with a JSON object in English, no explanation, no markdown.",
+            "Kleidung: $what\n\nOne key per piece (jacket, shirt, tshirt, pants, skirt, dress, shoes, boots, scarf, gloves, hat, bag …), each value with cut, length, how it is worn, color and material, e.g.:\n" +
+                "{\"jacket\": \"zip front field jacket with a stand collar, hip length, worn open, brown cotton\", \"pants\": \"slim fit jeans, ankle length, mid blue denim\", " +
+                "\"boots\": \"lace-up work boots with a thick sole, tan brown leather\"}",
+            0.5,
+        )
+        val j = jsonObject(a) ?: throw IllegalStateException(tr("Die KI hat nichts Brauchbares geliefert. Einfach nochmal versuchen."))
+        val pieces = j.keys().asSequence().map { it to j.optString(it).trim() }.filter { it.second.isNotBlank() }.toList()
+        return item.copy(name = item.name.ifBlank { text.trim() }, pieces = pieces.ifEmpty { item.pieces })
     }
 
     /** Gemma macht aus einer Beschreibung (z. B. "gemütliches Café am Abend") Bild-Tags */

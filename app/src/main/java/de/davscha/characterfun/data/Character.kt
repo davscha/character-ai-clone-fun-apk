@@ -67,8 +67,15 @@ data class Character(
     val voiceName: String = "",
     val gender: Gender = Gender.UNKNOWN,
     // ---------- Bilder (ComfyUI) ----------
-    /** Aussehen als Bild-Tags, z. B. "long hair, blonde hair, green eyes, glasses" (ohne Kleidung) */
+    /** Besonderheiten (früher: Aussehen als Tags) – kommt als „details“ ins Bild */
     val appearance: String = "",
+    /** Aussehen für MOSS Image, auf Englisch */
+    val age: String = "",
+    val face: String = "",
+    val eyes: String = "",
+    val body: String = "",
+    val skin: String = "",
+    val hair: String = "",
     /** Vorschaubild des Aussehens (Dateiname im Fundus-Ordner) */
     val appearancePreview: String = "",
     /** Kleidung aus dem Fundus, die diese Figur im Schrank hat (Ids) */
@@ -82,6 +89,9 @@ data class Character(
     /** Ort, an dem ein neues Gespräch beginnt (Id aus dem Fundus, leer = keiner) */
     val defaultLocationId: String = "",
 ) {
+    /** Gibt es Angaben zum Aussehen? */
+    val hasLooks: Boolean get() = listOf(age, face, eyes, body, skin, hair, appearance).any { it.isNotBlank() }
+
     /** Geschlecht in Worten für MOSS Image */
     val genderWord: String get() = when (gender) {
         Gender.MALE -> "a man"
@@ -118,6 +128,7 @@ data class Character(
         .put("geschlecht", gender.name)
         .put("aussehen", appearance)
         .put("aussehenVorschau", appearancePreview)
+        .put("alter", age).put("gesicht", face).put("augen", eyes).put("koerper", body).put("haut", skin).put("haare", hair)
         .put("schrank", JSONArray(wardrobe))
         .put("standardOutfit", defaultOutfitId)
         .put("bildStartwert", imageSeed)
@@ -147,6 +158,8 @@ data class Character(
             gender = Gender.of(o.optString("geschlecht")),
             appearance = o.optString("aussehen"),
             appearancePreview = o.optString("aussehenVorschau"),
+            age = o.optString("alter"), face = o.optString("gesicht"), eyes = o.optString("augen"),
+            body = o.optString("koerper"), skin = o.optString("haut"), hair = o.optString("haare"),
             wardrobe = o.optJSONArray("schrank")?.let { a -> List(a.length()) { a.optString(it) } }.orEmpty(),
             defaultOutfitId = o.optString("standardOutfit"),
             imageSeed = o.optLong("bildStartwert"),

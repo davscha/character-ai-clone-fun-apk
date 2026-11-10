@@ -77,37 +77,7 @@ fun CharacterImageSection(vm: AppViewModel, c: Character, onChange: (Character) 
     ComfyStatusBar(vm)
 
     // ---- Aussehen ----
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        TagInput(
-            value = c.appearance,
-            onChange = { onChange(c.copy(appearance = it)) },
-            label = tr("Aussehen (Tags, ohne Kleidung)"),
-            field = de.davscha.characterfun.data.TagField.APPEARANCE,
-            placeholder = "long hair, blonde hair, green eyes, glasses",
-            modifier = Modifier.weight(1f),
-        )
-        // Aussehen würfeln – sofort, ohne Gemma
-        IconButton(onClick = { onChange(c.copy(appearance = de.davscha.characterfun.data.TagLibrary.randomAppearance())) }) {
-            Icon(Icons.Default.Casino, tr("Aussehen würfeln"))
-        }
-        // Gemma liest den Steckbrief und schreibt Tags
-        IconButton(
-            onClick = {
-                helping = true
-                scope.launch {
-                    val text = listOf(c.name, c.shortDescription, c.longDescription, c.definition).filter { it.isNotBlank() }.joinToString(". ")
-                    runCatching { vm.tagsFromDescription(text, null) }
-                        .onSuccess { onChange(c.copy(appearance = it)) }
-                        .onFailure { Toast.makeText(context, it.message ?: tr("Fehler"), Toast.LENGTH_LONG).show() }
-                    helping = false
-                }
-            },
-            enabled = !helping && (c.longDescription.isNotBlank() || c.shortDescription.isNotBlank()),
-        ) {
-            if (helping) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-            else Icon(Icons.Default.AutoFixHigh, tr("Aus dem Steckbrief schreiben lassen"))
-        }
-    }
+    LooksFields(vm, c, onChange)
 
     Row(verticalAlignment = Alignment.Top) {
         Box(
@@ -143,7 +113,7 @@ fun CharacterImageSection(vm: AppViewModel, c: Character, onChange: (Character) 
                         painting = false
                     }
                 },
-                enabled = vm.comfyReady && c.appearance.isNotBlank() && !painting,
+                enabled = vm.comfyReady && !painting,
             ) {
                 Icon(Icons.Default.Brush, null, Modifier.size(18.dp))
                 Spacer(Modifier.width(6.dp))

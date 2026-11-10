@@ -81,9 +81,10 @@ fun ImageMessageDialog(
     var attach by remember { mutableStateOf(false) }
     // Bild malen lassen statt auswählen
     var paintMode by remember { mutableStateOf(false) }
-    var paintTags by remember { mutableStateOf("") }
+    var moment by remember { mutableStateOf(AppViewModel.SceneMoment()) }
     var paintLocation by remember { mutableStateOf(vm.chatLocationId) }
-    var who by remember { mutableStateOf<Character?>(null) }
+    // Wer ist mit auf dem Bild? (mehrere möglich – MOSS hält sie über die Namen auseinander)
+    var who by remember { mutableStateOf<List<Character>>(emptyList()) }
     var painting by remember { mutableStateOf(false) }
     var seconds by remember { mutableStateOf(0) }
     var suggesting by remember { mutableStateOf(false) }
@@ -129,7 +130,7 @@ fun ImageMessageDialog(
                         selected = paintMode,
                         onClick = { paintMode = true },
                         enabled = vm.comfyReady && !busy,
-                        label = { Text("🎨 " + tr("Bild malen (Tags)")) },
+                        label = { Text("🎨 " + tr("Bild malen")) },
                     )
                 }
                 if (paintMode) {
@@ -139,38 +140,21 @@ fun ImageMessageDialog(
                         }
                         // Wer ist mit auf dem Bild?
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            FilterChip(selected = who == null, onClick = { who = null }, label = { Text(tr("Niemand")) })
+                            FilterChip(selected = who.isEmpty(), onClick = { who = emptyList() }, label = { Text(tr("Niemand")) })
                             targets.forEach { t ->
-                                FilterChip(selected = who?.id == t.id, onClick = { who = t }, label = { Text("${t.emoji} ${t.name}") })
+                                val on = who.any { it.id == t.id }
+                                FilterChip(selected = on, onClick = { who = if (on) who.filter { it.id != t.id } else who + t }, label = { Text("${t.emoji} ${t.name}") })
                             }
                         }
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            androidx.compose.material3.OutlinedTextField(
-                                value = paintTags,
-                                onValueChange = { paintTags = it },
-                                label = { Text(tr("Was ist zu sehen?") + " (English)") },
-                                placeholder = { Text("A woman sitting on a sofa, smiling at the viewer") },
-                                minLines = 2,
-                                enabled = !painting && !suggesting,
-                                modifier = Modifier.weight(1f),
-                            )
-                            IconButton(
-                                onClick = {
-                                    val t = who ?: targets.firstOrNull() ?: return@IconButton
-                                    suggesting = true
-                                    scope.launch {
-                                        val recent = if (targets.size > 1) vm.recentRoomText() else vm.recentChatText()
-                                        runCatching { vm.sceneTags(t, recent) }.onSuccess { paintTags = it }
-                                            .onFailure { Toast.makeText(context, it.message ?: tr("Fehler"), Toast.LENGTH_LONG).show() }
-                                        suggesting = false
-                                    }
-                                },
-                                enabled = !painting && !suggesting,
-                            ) {
-                                if (suggesting) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-                                else Icon(Icons.Default.AutoFixHigh, tr("Gemma schlägt Tags vor"))
+                        MomentEditor(who, moment, enabled = !painting && !suggesting, busy = suggesting, onAsk = {
+                            suggesting = true
+                            scope.launch {
+                                val recent = if (targets.size > 1) vm.recentRoomText() else vm.recentChatText()
+                                runCatching { vm.sceneMoment(who, recent, vm.location(paintLocation)) }.onSuccess { moment = it }
+                                    .onFailure { Toast.makeText(context, it.message ?: tr("Fehler"), Toast.LENGTH_LONG).show() }
+                                suggesting = false
                             }
-                        }
+                        }) { moment = it }
                         if (painting) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
@@ -184,20 +168,20 @@ fun ImageMessageDialog(
                                     seconds = 0
                                     scope.launch {
                                         val again = path != null
-                                        runCatching { vm.paintFree(paintTags, vm.location(paintLocation), who, randomSeed = again) { seconds = it } }
+                                        runCatching { vm.paintMoment(who, vm.location(paintLocation), moment, randomSeed = again) { seconds = it } }
                                             .onSuccess { p ->
                                                 path = p
                                                 result = ""
                                                 // Selbst gemaltes Bild geht standardmäßig mit in den Chat
                                                 attach = allowAttach
                                                 // Die Figur ist selbst auf dem Bild – dann spricht die Nachricht sie direkt an
-                                                if (hint.isBlank() && who != null) hint = tr("Auf dem Bild ist %s.", who!!.name)
+                                                if (hint.isBlank() && who.isNotEmpty()) hint = tr("Auf dem Bild ist %s.", who.joinToString(" & ") { it.name })
                                             }
                                             .onFailure { Toast.makeText(context, it.message ?: tr("Fehler"), Toast.LENGTH_LONG).show() }
                                         painting = false
                                     }
                                 },
-                                enabled = vm.comfyReady && paintTags.isNotBlank(),
+                                enabled = vm.comfyReady && (!moment.isEmpty || who.isEmpty()),
                             ) { Text(if (path == null) tr("Malen") else tr("Neu malen")) }
                         }
                     }

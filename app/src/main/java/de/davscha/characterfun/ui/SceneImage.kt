@@ -1,5 +1,7 @@
 package de.davscha.characterfun.ui
 
+import de.davscha.characterfun.data.ImagePrompt
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -116,7 +118,7 @@ fun SceneImageDialog(
     val scope = rememberCoroutineScope()
     var locationId by remember { mutableStateOf(initialLocationId) }
     var outfitId by remember { mutableStateOf(initialOutfitId) }
-    var tags by remember { mutableStateOf("") }
+    var moment by remember { mutableStateOf(AppViewModel.SceneMoment()) }
     var describing by remember { mutableStateOf(false) }
     var painting by remember { mutableStateOf(false) }
     var seconds by remember { mutableStateOf(0) }
@@ -128,7 +130,7 @@ fun SceneImageDialog(
     fun describe() {
         describing = true
         scope.launch {
-            runCatching { vm.sceneTags(c, recent()) }.onSuccess { tags = it }.onFailure { error = it.message }
+            runCatching { vm.sceneMoment(listOf(c), recent(), vm.location(locationId)) }.onSuccess { moment = it }.onFailure { error = it.message }
             describing = false
         }
     }
@@ -137,7 +139,7 @@ fun SceneImageDialog(
         error = null
         seconds = 0
         scope.launch {
-            runCatching { vm.paintScene(c, vm.location(locationId), outfit, tags, randomSeed = rounds > 0) { seconds = it } }
+            runCatching { vm.paintMoment(listOf(c), vm.location(locationId), moment, randomSeed = rounds > 0, outfits = mapOf(c.id to outfit)) { seconds = it } }
                 .onSuccess { image = it; rounds++ }
                 .onFailure { error = it.message ?: tr("Fehler") }
             painting = false
@@ -155,22 +157,8 @@ fun SceneImageDialog(
                     LocationPicker(vm, vm.location(locationId), enabled = !painting) { locationId = it }
                     if (allowOutfit) OutfitPicker(vm, c, vm.clothing(outfitId), enabled = !painting) { outfitId = it }
                 }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    androidx.compose.material3.OutlinedTextField(
-                        value = tags,
-                        onValueChange = { tags = it },
-                        label = { Text(tr("Was passiert gerade?") + " (English)") },
-                        placeholder = { Text("She waves and smiles, upper body, warm light") },
-                        minLines = 2,
-                        enabled = !describing && !painting,
-                        modifier = Modifier.weight(1f),
-                    )
-                    IconButton(onClick = { describe() }, enabled = !describing && !painting) {
-                        if (describing) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-                        else Icon(Icons.Default.AutoFixHigh, tr("Gemma beschreibt den Moment"))
-                    }
-                }
-                if (c.appearance.isBlank()) {
+                MomentEditor(listOf(c), moment, enabled = !describing && !painting, busy = describing, onAsk = { describe() }) { moment = it }
+                if (!c.hasLooks) {
                     Text(
                         tr("Tipp: Im Figurenblatt das Aussehen eintragen, dann sieht %s auf jedem Bild gleich aus.", c.name),
                         fontSize = 12.sp,
@@ -223,6 +211,57 @@ fun FullImageDialog(path: String, onClose: () -> Unit) {
             contentAlignment = Alignment.Center,
         ) {
             AsyncImage(model = java.io.File(path), contentDescription = null, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize().padding(16.dp))
+        }
+    }
+}
+
+/**
+ * Der Moment fürs Bild: pro Figur Haltung und Gesichtsausdruck, dazu das Zusammenspiel (action) und die Kamera.
+ * Gemma füllt alles aus ([onAsk]), du kannst jedes Feld ändern.
+ */
+@Composable
+fun MomentEditor(
+    people: List<Character>, m: AppViewModel.SceneMoment, enabled: Boolean, busy: Boolean, onAsk: () -> Unit,
+    onChange: (AppViewModel.SceneMoment) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(tr("Was passiert gerade?") + " (English)", fontSize = 13.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            IconButton(onClick = onAsk, enabled = enabled) {
+                if (busy) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                else Icon(Icons.Default.AutoFixHigh, tr("Gemma beschreibt den Moment"))
+            }
+        }
+        people.forEach { c ->
+            val mo = m.poses[c.id] ?: ImagePrompt.Moment()
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                androidx.compose.material3.OutlinedTextField(
+                    value = mo.pose, onValueChange = { v -> onChange(m.copy(poses = m.poses + (c.id to mo.copy(pose = v)))) },
+                    label = { Text(tr("Haltung von %s", c.name)) }, placeholder = { Text("sitting, leaning back, knees up") },
+                    enabled = enabled, maxLines = 3, modifier = Modifier.weight(1.4f),
+                )
+                androidx.compose.material3.OutlinedTextField(
+                    value = mo.expression, onValueChange = { v -> onChange(m.copy(poses = m.poses + (c.id to mo.copy(expression = v)))) },
+                    label = { Text(tr("Gesicht")) }, placeholder = { Text("slight smile") },
+                    enabled = enabled, maxLines = 2, modifier = Modifier.weight(1f),
+                )
+            }
+        }
+        androidx.compose.material3.OutlinedTextField(
+            value = m.action, onValueChange = { onChange(m.copy(action = it)) },
+            label = { Text(if (people.size > 1) tr("Zusammenspiel (mit Namen)") else tr("Handlung mit Dingen und Umgebung")) },
+            placeholder = { Text(if (people.size > 1) "Angus stands behind Alice, his hands on her shoulders" else "she holds a cup of coffee with both hands") },
+            enabled = enabled, maxLines = 3, modifier = Modifier.fillMaxWidth(),
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            androidx.compose.material3.OutlinedTextField(
+                value = m.camera, onValueChange = { onChange(m.copy(camera = it)) }, label = { Text(tr("Kamera")) }, placeholder = { Text("cowboy shot, dutch angle") },
+                enabled = enabled, singleLine = true, modifier = Modifier.weight(1f),
+            )
+            androidx.compose.material3.OutlinedTextField(
+                value = m.lights, onValueChange = { onChange(m.copy(lights = it)) }, label = { Text(tr("Licht")) }, placeholder = { Text("warm evening light") },
+                enabled = enabled, singleLine = true, modifier = Modifier.weight(1f),
+            )
         }
     }
 }

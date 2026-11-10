@@ -135,7 +135,7 @@ fun FundusScreen(vm: AppViewModel) {
                 } else {
                     val list = if (tab == 0) vm.fundus.locations else vm.fundus.clothing
                     items(list, key = { it.id }) { item ->
-                        FundusCard(vm, item.id, item.preview, if (tab == 0) "🏞️" else "👗", item.name, item.tags) { editItem = item }
+                        FundusCard(vm, item.id, item.preview, if (tab == 0) "🏞️" else "👗", item.name, if (tab == 0) item.text else item.pieces.joinToString(" · ") { it.first }) { editItem = item }
                     }
                 }
             }
@@ -219,39 +219,7 @@ private fun FundusItemDialog(vm: AppViewModel, kind: FundusKind, original: Fundu
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
-                TagInput(
-                    value = item.tags,
-                    onChange = { item = item.copy(tags = it) },
-                    label = tr("Tags (Englisch, mit Kommas)"),
-                    field = if (kind == FundusKind.LOCATION) de.davscha.characterfun.data.TagField.LOCATION else de.davscha.characterfun.data.TagField.CLOTHING,
-                    placeholder = if (kind == FundusKind.LOCATION) "cafe, indoors, warm lighting" else "brown coat, white sweater, black pants",
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                // Gemma hilft beim Schreiben der Tags
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(
-                        value = description,
-                        onValueChange = { description = it },
-                        label = { Text(tr("Oder beschreiben, Gemma macht Tags daraus")) },
-                        singleLine = true,
-                        modifier = Modifier.weight(1f),
-                    )
-                    IconButton(
-                        onClick = {
-                            helping = true
-                            scope.launch {
-                                runCatching { vm.tagsFromDescription(description, kind) }
-                                    .onSuccess { tags -> item = item.copy(tags = tags, name = item.name.ifBlank { description.trim() }) }
-                                    .onFailure { Toast.makeText(context, it.message ?: tr("Fehler"), Toast.LENGTH_LONG).show() }
-                                helping = false
-                            }
-                        },
-                        enabled = description.isNotBlank() && !helping,
-                    ) {
-                        if (helping) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-                        else Icon(Icons.Default.AutoFixHigh, tr("Tags schreiben lassen"))
-                    }
-                }
+                if (kind == FundusKind.LOCATION) PlaceFields(vm, item) { item = it } else ClothingPieces(vm, item) { item = it }
                 if (Edition.PRO && kind == FundusKind.CLOTHING) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(tr("Vorschau trägt:"), fontSize = 13.sp)
@@ -266,7 +234,7 @@ private fun FundusItemDialog(vm: AppViewModel, kind: FundusKind, original: Fundu
                 vm.previewError[item.id]?.let { Text(it, fontSize = 12.sp, color = MaterialTheme.colorScheme.error) }
                 if (Edition.PRO) OutlinedButton(
                     onClick = { vm.paintPreview(kind, item.copy(preview = preview)) },
-                    enabled = vm.comfyReady && item.tags.isNotBlank() && vm.previewBusy[item.id] != true,
+                    enabled = vm.comfyReady && item.text.isNotBlank() && vm.previewBusy[item.id] != true,
                 ) {
                     Icon(Icons.Default.Brush, null, Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp))
@@ -276,8 +244,12 @@ private fun FundusItemDialog(vm: AppViewModel, kind: FundusKind, original: Fundu
         },
         confirmButton = {
             TextButton(
-                onClick = { vm.saveFundusItem(kind, item.copy(name = item.name.trim(), tags = item.tags.trim(), preview = preview)); onClose() },
-                enabled = item.name.isNotBlank() && item.tags.isNotBlank(),
+                onClick = {
+                    val clean = item.copy(name = item.name.trim(), preview = preview, background = item.background.trim(), lights = item.lights.trim(),
+                        pieces = item.pieces.filter { it.second.isNotBlank() }.map { it.first.trim().ifBlank { "outfit" } to it.second.trim() })
+                    vm.saveFundusItem(kind, clean); onClose()
+                },
+                enabled = item.name.isNotBlank(),
             ) { Text(tr("Speichern")) }
         },
         dismissButton = {

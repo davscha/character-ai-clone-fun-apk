@@ -13,14 +13,28 @@ data class FundusItem(
     val preview: String = "",
     /** Nur bei Kleidung: wer die Vorschau trägt – "1girl" oder "1boy" */
     val model: String = "1girl",
+    /** Ort für MOSS Image (Englisch): was man sieht und wie das Licht ist */
+    val background: String = "",
+    val lights: String = "",
+    /** Kleidung für MOSS Image: Teil (z. B. jacket) → Beschreibung auf Englisch */
+    val pieces: List<Pair<String, String>> = emptyList(),
 ) {
+    /** Als Text für die KI (Chat-Hinweise) */
+    val text: String get() = listOf(background, lights).filter { it.isNotBlank() }.joinToString(", ")
+        .ifBlank { pieces.joinToString(", ") { it.second } }.ifBlank { tags }
+
     fun toJson(): JSONObject = JSONObject().put("id", id).put("name", name).put("tags", tags).put("vorschau", preview).put("model", model)
+        .put("hintergrund", background).put("licht", lights)
+        .put("teile", JSONArray(pieces.map { (k, v) -> JSONObject().put("teil", k).put("text", v) }))
 
     companion object {
+        /** Alte Tags: bei Orten zum Hintergrund, bei Kleidung zu einem Teil „outfit“ (passiert beim Laden des Fundus) */
         fun fromJson(o: JSONObject) = FundusItem(
             o.optString("id").ifEmpty { UUID.randomUUID().toString() },
             o.optString("name"), o.optString("tags"), o.optString("vorschau"),
             o.optString("model").ifEmpty { "1girl" },
+            o.optString("hintergrund"), o.optString("licht"),
+            o.optJSONArray("teile")?.let { a -> List(a.length()) { a.getJSONObject(it).let { t -> t.optString("teil") to t.optString("text") } } }.orEmpty(),
         )
     }
 }
@@ -45,7 +59,7 @@ data class StyleItem(
         fun fromJson(o: JSONObject) = StyleItem(
             o.optString("id").ifEmpty { UUID.randomUUID().toString() },
             o.optString("name"), o.optString("lora"), o.optDouble("staerke", 1.0).toFloat(), o.optString("vorschau"),
-            o.optString("prompt").ifBlank { if (o.optString("lora").isNotBlank()) "anime illustration, clean lineart, soft colors" else "" },
+            o.optString("prompt"),
         )
     }
 }
@@ -69,11 +83,16 @@ data class Fundus(
         fun fromJson(o: JSONObject): Fundus {
             fun items(key: String) = o.optJSONArray(key)?.let { a -> List(a.length()) { FundusItem.fromJson(a.getJSONObject(it)) } }.orEmpty()
             val styles = o.optJSONArray("stile")?.let { a -> List(a.length()) { StyleItem.fromJson(a.getJSONObject(it)) } }.orEmpty()
-            return Fundus(items("orte"), items("kleidung"), styles, o.optString("standardStil"))
+            val places = items("orte").map { if (it.background.isBlank() && it.tags.isNotBlank()) it.copy(background = it.tags) else it }
+            val clothes = items("kleidung").map { if (it.pieces.isEmpty() && it.tags.isNotBlank()) it.copy(pieces = listOf("outfit" to it.tags)) else it }
+            // Neuer Stil „Kino-Foto“ auch für alte Fundus-Dateien
+            val allStyles = if (styles.none { it.id == "stil-kino" }) listOf(mossStyles.first()) + styles else styles
+            return Fundus(places, clothes, allStyles, o.optString("standardStil"))
         }
 
         /** Stile für MOSS Image (in Worten) */
         val mossStyles = listOf(
+            StyleItem(id = "stil-kino", name = "Kino-Foto", prompt = "cinematic photography, faded glow theme, vignette, film grain"),
             StyleItem(id = "stil-disney", name = "Disney-Zeichentrick", prompt = "classic Disney animation style, hand-drawn, soft colors, expressive faces"),
             StyleItem(id = "stil-anime", name = "Anime", prompt = "anime illustration, clean lineart, vibrant colors"),
             StyleItem(id = "stil-comic", name = "Comic", prompt = "western comic book art, bold ink outlines, flat colors"),
@@ -84,7 +103,7 @@ data class Fundus(
         /** Startausstattung beim ersten Öffnen */
         val starter: Fundus get() {
             val pandora = mossStyles.first()
-            return Fundus(
+            return fromJson(Fundus(
                 locations = listOf(
                     FundusItem(name = "Gemütliches Café", tags = "cafe, indoors, wooden table, coffee cup, warm lighting, window, cozy"),
                     FundusItem(name = "Stadt am Abend", tags = "city, street, evening, street lamps, buildings, crowd, outdoors"),
@@ -103,7 +122,7 @@ data class Fundus(
                 ),
                 styles = mossStyles,
                 defaultStyleId = pandora.id,
-            )
+            ).toJson())
         }
     }
 }
@@ -117,24 +136,75 @@ object ImagePrompt {
         .distinct()
         .joinToString(", ")
 
-    /** Figur in Worten: „a woman, long red hair, green eyes, wearing brown coat“ (MOSS Image versteht Sätze) */
-    fun looks(c: Character, outfit: FundusItem?) = join(c.genderWord, c.appearance, outfit?.tags?.takeIf { it.isNotBlank() }?.let { "wearing $it" })
+    /** Was eine Figur auf einem Bild macht: eigene Haltung und Gesichtsausdruck */
+    data class Moment(val pose: String = "", val expression: String = "")
 
-    fun locationPreview(item: FundusItem) = "Scenery without people: ${join(item.tags)}."
+    private fun JSONObject.putText(k: String, v: String?) = apply { if (!v.isNullOrBlank()) put(k, v.trim()) }
+
+    fun clothing(o: FundusItem?): JSONObject? {
+        val parts = o?.pieces?.filter { it.second.isNotBlank() }.orEmpty()
+        if (parts.isEmpty()) return null
+        return JSONObject().apply { parts.forEach { (k, v) -> put(k.trim().ifBlank { "outfit" }, v.trim()) } }
+    }
+
+    /** Eine Figur so, wie MOSS Image sie versteht */
+    fun figure(c: Character, outfit: FundusItem?, m: Moment = Moment()): JSONObject {
+        val o = JSONObject().putText("name", c.name)
+        c.age.trim().toIntOrNull()?.let { o.put("age", it) } ?: o.putText("age", c.age)
+        when (c.gender) { Gender.MALE -> o.put("gender", "male"); Gender.FEMALE -> o.put("gender", "female"); Gender.DIVERSE -> o.put("gender", "non-binary"); else -> {} }
+        val shapes = JSONObject().putText("face", c.face).putText("eyes", c.eyes).putText("body", c.body)
+        if (shapes.length() > 0) o.put("shapes", shapes)
+        o.putText("skin", c.skin).putText("hair", c.hair).putText("details", c.appearance)
+        clothing(outfit)?.let { o.put("clothing", it) }
+        o.putText("pose", m.pose).putText("face_expression", m.expression)
+        return o
+    }
+
+    /** Das ganze Bild als JSON-Text */
+    fun build(
+        style: String, figures: List<JSONObject> = emptyList(), action: String = "", background: String = "", lights: String = "", camera: String = "",
+    ): String {
+        val o = JSONObject().putText("style", style)
+        if (figures.isNotEmpty()) o.put("figures", JSONArray(figures))
+        o.putText("action", action).putText("background", background).putText("lights", lights).putText("camera", camera)
+        return o.toString(2)
+    }
+
+    fun locationPreview(style: String, item: FundusItem) =
+        build(style, action = "empty scene, no people", background = item.background.ifBlank { item.tags }, lights = item.lights, camera = "wide establishing shot")
+
     /** Eine Person als Model, eine einzige Ansicht von vorn */
-    fun clothingPreview(item: FundusItem) =
-        "Full body front view of a single ${if (item.model == "1boy") "man" else "young woman"} wearing ${join(item.tags)}, standing, plain white background."
-    /** MOSS hat keinen Negativ-Prompt mehr – bleibt für eigene Workflows */
-    const val CLOTHING_PREVIEW_NEGATIVE = "multiple views, reference sheet, character sheet, mannequin"
-    const val STYLE_PREVIEW = "A smiling young woman in a flower field, upper body, looking at the viewer."
+    fun clothingPreview(style: String, item: FundusItem): String {
+        val f = JSONObject().put("gender", if (item.model == "1boy") "male" else "female").put("age", 25)
+        clothing(item)?.let { f.put("clothing", it) }
+        f.put("pose", "standing straight, arms relaxed at the sides")
+        return build(style, listOf(f), background = "plain white studio background", lights = "soft even studio light", camera = "full body shot, front view, single person")
+    }
+
+    fun stylePreview(style: String) = build(
+        style, listOf(JSONObject().put("gender", "female").put("age", 25).put("hair", "long wavy hair").put("pose", "standing in a flower field").put("face_expression", "warm smile")),
+        background = "meadow full of flowers", lights = "golden afternoon sun", camera = "upper body shot",
+    )
 
     /** Vorschau des Aussehens: Oberkörper, Gesicht gut zu sehen */
-    fun appearancePreview(c: Character, outfit: FundusItem?) =
-        "Portrait of a single character: ${looks(c, outfit)}. Upper body, smiling, looking at the viewer, plain background."
+    fun appearancePreview(style: String, c: Character, outfit: FundusItem?) = build(
+        style, listOf(figure(c, outfit, Moment("standing, relaxed, looking at the camera", "friendly smile"))),
+        background = "plain neutral studio background", lights = "soft even studio light", camera = "upper body portrait, front view, single person",
+    )
 
     /** Anprobieren: die Figur in einem Outfit, ganzer Körper, eine Ansicht */
-    fun tryOn(c: Character, outfit: FundusItem) =
-        "Full body front view of a single character: ${looks(c, outfit)}. Standing, looking at the viewer, plain white background."
+    fun tryOn(style: String, c: Character, outfit: FundusItem) = build(
+        style, listOf(figure(c, outfit, Moment("standing straight, looking at the camera", "calm"))),
+        background = "plain white studio background", lights = "soft even studio light", camera = "full body shot, front view, single person",
+    )
+
+    /** Aussehen in einer Zeile – für die KI */
+    fun looks(c: Character, outfit: FundusItem?) = join(
+        c.genderWord, c.age.takeIf { it.isNotBlank() }?.let { "age $it" }, c.face, c.eyes, c.body, c.skin, c.hair, c.appearance,
+        outfit?.pieces?.joinToString(", ") { it.second }?.takeIf { it.isNotBlank() }?.let { "wearing $it" },
+    )
+
+    const val CLOTHING_PREVIEW_NEGATIVE = "multiple views, reference sheet, character sheet, mannequin"
 }
 
 /** Welche Liste im Fundus */
