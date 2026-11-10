@@ -1,5 +1,7 @@
 package de.davscha.characterfun.ui
 
+import de.davscha.characterfun.Edition
+
 import kotlinx.coroutines.launch
 
 import de.davscha.characterfun.i18n.AppLanguage
@@ -121,8 +123,8 @@ fun ModelsScreen(vm: AppViewModel) {
                     }
                 }
 
-                SectionTitle(tr("KI-Quelle"))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (Edition.PRO) SectionTitle(tr("KI-Quelle"))
+                if (Edition.PRO) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilterChip(
                         selected = !vm.useOllama,
                         onClick = { vm.setSource(false) },
@@ -154,8 +156,10 @@ fun ModelsScreen(vm: AppViewModel) {
                     ImportBox(vm)
                 }
 
-                SectionTitle(tr("Bilder (ComfyUI auf dem PC)"))
-                ComfySettings(vm)
+                if (Edition.PRO) {
+                    SectionTitle(tr("Bilder (ComfyUI auf dem PC)"))
+                    ComfySettings(vm)
+                }
 
                 SectionTitle(tr("Kreativität"))
                 Text(

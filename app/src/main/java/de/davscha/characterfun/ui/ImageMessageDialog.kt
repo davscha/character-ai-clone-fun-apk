@@ -1,5 +1,7 @@
 package de.davscha.characterfun.ui
 
+import de.davscha.characterfun.Edition
+
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -123,7 +125,7 @@ fun ImageMessageDialog(
                         enabled = !busy,
                         label = { Text("🖼️ " + tr("Bild auswählen")) },
                     )
-                    FilterChip(
+                    if (Edition.PRO) FilterChip(
                         selected = paintMode,
                         onClick = { paintMode = true },
                         enabled = vm.comfyReady && !busy,

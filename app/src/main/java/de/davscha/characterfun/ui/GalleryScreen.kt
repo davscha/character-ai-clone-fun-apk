@@ -1,5 +1,7 @@
 package de.davscha.characterfun.ui
 
+import de.davscha.characterfun.Edition
+
 import androidx.compose.foundation.horizontalScroll
 
 import androidx.compose.foundation.layout.size
@@ -163,7 +165,7 @@ fun GalleryScreen(vm: AppViewModel) {
                     Spacer(Modifier.width(6.dp))
                     Text(tr("Importieren"))
                 }
-                TextButton(onClick = { vm.navigate(Screen.FundusPage) }) {
+                if (Edition.PRO) TextButton(onClick = { vm.navigate(Screen.FundusPage) }) {
                     Text("🎭")
                     Spacer(Modifier.width(6.dp))
                     Text(tr("Fundus"))

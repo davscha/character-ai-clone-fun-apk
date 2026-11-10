@@ -1,5 +1,7 @@
 package de.davscha.characterfun.ui
 
+import de.davscha.characterfun.Edition
+
 import de.davscha.characterfun.i18n.AppLanguage
 import de.davscha.characterfun.i18n.I18n
 import de.davscha.characterfun.i18n.tr
@@ -113,7 +115,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     // ---------- KI-Quelle: Intern oder Ollama ----------
 
     /** true = Ollama im Heimnetz, false = Gemma auf dem Gerät */
-    var useOllama by mutableStateOf(prefs.getString("quelle", "intern") == "ollama")
+    var useOllama by mutableStateOf(Edition.PRO && prefs.getString("quelle", "intern") == "ollama")
         private set
     var ollamaHost by mutableStateOf(prefs.getString("ollama_host", "") ?: "")
         private set
@@ -171,6 +173,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Verbindungstest: Ollama erreichbar? Welche Modelle gibt es, und welche können Bilder? */
     fun testOllama() {
+        if (Edition.LITE) return
         if (ollamaHost.isBlank()) {
             ollamaStatus = OllamaStatus.Failed(tr("Bitte die IP-Adresse des PCs eintragen."))
             return
@@ -1462,7 +1465,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private val comfy get() = ComfyClient(comfyHost, comfyPort)
     private val workflowTemplate get() = repo.loadWorkflow() ?: ComfyClient.DEFAULT_WORKFLOW
-    val comfyConfigured get() = comfyHost.isNotBlank()
+    val comfyConfigured get() = Edition.PRO && comfyHost.isNotBlank()
     /** ComfyUI eingetragen UND erreichbar – sonst sind alle Bild-Knöpfe ausgegraut */
     val comfyReady get() = comfyConfigured && comfyOk
 
@@ -1491,7 +1494,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun testComfy() {
-        if (comfyHost.isBlank() || comfyTesting) return
+        if (Edition.LITE || comfyHost.isBlank() || comfyTesting) return
         comfyTesting = true
         viewModelScope.launch {
             try {

@@ -24,15 +24,19 @@ jobs:
           gradle-version: "8.11.1"
 
       - name: APK bauen
-        run: gradle assembleDebug --stacktrace
+        run: gradle assembleProDebug assembleLiteDebug --stacktrace
 
       - name: APK umbenennen
-        run: cp app/build/outputs/apk/debug/app-debug.apk CharacterFun.apk
+        run: |
+          cp app/build/outputs/apk/pro/debug/app-pro-debug.apk CharacterFun.apk
+          cp app/build/outputs/apk/lite/debug/app-lite-debug.apk CharacterFun-Lite.apk
 
       - uses: actions/upload-artifact@v4
         with:
           name: CharacterFun
-          path: CharacterFun.apk
+          path: |
+            CharacterFun.apk
+            CharacterFun-Lite.apk
 
       # Immer der neueste Build unter "Releases → latest", direkt vom Tablet ladbar
       - name: Release aktualisieren
@@ -40,7 +44,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete latest --yes --cleanup-tag || true
-          gh release create latest CharacterFun.apk \
+          gh release create latest CharacterFun.apk CharacterFun-Lite.apk \
             --title "Character Fun – Build ${{ github.run_number }}" \
             --notes "Automatisch gebaut aus ${{ github.sha }}" \
             --target ${{ github.sha }}

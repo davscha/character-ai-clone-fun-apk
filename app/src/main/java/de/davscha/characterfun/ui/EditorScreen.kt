@@ -1,5 +1,7 @@
 package de.davscha.characterfun.ui
 
+import de.davscha.characterfun.Edition
+
 import androidx.compose.foundation.layout.Box
 
 import androidx.compose.material.icons.filled.Checklist
@@ -130,7 +132,7 @@ fun EditorScreen(vm: AppViewModel, characterId: String?) {
                 ProfileCheck(vm, c.copy(starters = starters.filter { it.isNotBlank() }))
 
                 // Womit ein neues Gespräch beginnt: Ort und Kleidung aus dem Fundus
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                if (Edition.PRO) Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(tr("Start:"), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     LocationPicker(vm, vm.location(c.defaultLocationId)) { c = c.copy(defaultLocationId = it) }
                     OutfitPicker(vm, c, vm.clothing(c.defaultOutfitId), noneLabel = tr("Keine besondere Kleidung")) { id ->
@@ -237,7 +239,7 @@ fun EditorScreen(vm: AppViewModel, characterId: String?) {
 
                 VoiceSection(vm, c) { c = it }
 
-                CharacterImageSection(vm, c) { c = it }
+                if (Edition.PRO) CharacterImageSection(vm, c) { c = it }
 
                 Text(tr("Gesprächsstarter (optional)"), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 starters.forEachIndexed { i, s ->

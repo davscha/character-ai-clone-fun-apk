@@ -1,5 +1,7 @@
 package de.davscha.characterfun.ui
 
+import de.davscha.characterfun.Edition
+
 import de.davscha.characterfun.i18n.I18n
 import de.davscha.characterfun.i18n.tr
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -255,7 +257,7 @@ fun ChatScreen(vm: AppViewModel) {
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outline)
         vm.game?.let { GameBanner(vm, it) }
-        SceneBar(vm, c)
+        if (Edition.PRO) SceneBar(vm, c)
 
         Box(Modifier.weight(1f).fillMaxWidth()) {
             LazyColumn(
