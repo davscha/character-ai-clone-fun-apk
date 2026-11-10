@@ -121,8 +121,6 @@ fun ChatScreen(vm: AppViewModel) {
     // Gefundene Nachricht kurz hervorheben
     var highlight by remember { mutableStateOf<Int?>(null) }
     LaunchedEffect(highlight) { if (highlight != null) { kotlinx.coroutines.delay(2500); highlight = null } }
-    var showThreads by remember { mutableStateOf(false) }
-    if (showThreads) ThreadsDialog(vm, c, onRestart = { showThreads = false; confirmRestartState.value = true }) { showThreads = false }
     val lastText = vm.messages.lastOrNull()?.text
     // Beim Streamen immer zur neuesten Nachricht scrollen
     LaunchedEffect(vm.messages.size, lastText) {
@@ -137,6 +135,8 @@ fun ChatScreen(vm: AppViewModel) {
 
     val confirmRestartState = remember { mutableStateOf(false) }
     var confirmRestart by confirmRestartState
+    var showThreads by remember { mutableStateOf(false) }
+    if (showThreads) ThreadsDialog(vm, c, onRestart = { showThreads = false; confirmRestartState.value = true }) { showThreads = false }
     var showMemories by remember { mutableStateOf(false) }
     if (showMemories) MemoriesDialog(vm, c) { showMemories = false }
     var showGames by remember { mutableStateOf(false) }
