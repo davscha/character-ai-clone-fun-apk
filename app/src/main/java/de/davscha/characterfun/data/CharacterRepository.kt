@@ -73,15 +73,72 @@ class CharacterRepository(private val context: Context) {
 
     // ---------- Figuren teilen: eine .json-Datei mit eingebettetem Bild ----------
 
-    /** Schreibt die Figur samt Avatar in die gewählte Datei. */
-    fun exportCharacter(c: Character, uri: Uri) {
+    /** Figur samt Avatar als JSON (ohne Id) */
+    private fun characterJson(c: Character): JSONObject {
         val json = JSONObject()
             .put("format", "characterfun-figur")
             .put("version", 1)
             .put("figur", c.toJson().apply { remove("id"); remove("builtIn"); remove("avatarFile") })
         avatar(c)?.let { json.put("bild", android.util.Base64.encodeToString(it.readBytes(), android.util.Base64.NO_WRAP)) }
+        return json
+    }
+
+    /** Figur aus JSON – bekommt eine neue Id und gilt als eigene Figur */
+    private fun characterFromJson(json: JSONObject): Character {
+        var c = Character.fromJson(json.getJSONObject("figur").put("id", "")).copy(builtIn = false)
+        json.optString("bild").takeIf { it.isNotEmpty() }?.let { b64 ->
+            val name = "${c.id}-${System.currentTimeMillis()}.jpg"
+            File(avatarDir, name).writeBytes(android.util.Base64.decode(b64, android.util.Base64.DEFAULT))
+            c = c.copy(avatarFile = name)
+        }
+        return c
+    }
+
+    /** Schreibt die Figur samt Avatar in die gewählte Datei. */
+    fun exportCharacter(c: Character, uri: Uri) {
+        context.contentResolver.openOutputStream(uri, "wt")?.use { it.write(characterJson(c).toString(2).toByteArray()) }
+            ?: error("Datei konnte nicht geschrieben werden")
+    }
+
+    /** Raum samt Figuren (mit Avatar) und Verlauf in eine Datei – Bilder im Verlauf bleiben draußen */
+    fun exportRoom(room: Room, members: List<Character>, uri: Uri) {
+        val json = JSONObject()
+            .put("format", "characterfun-raum")
+            .put("version", 1)
+            .put("raum", room.copy(messages = room.messages.map { it.copy(image = "") }).toJson())
+            .put("figuren", JSONArray(members.map { m -> characterJson(m).put("alteId", m.id) }))
         context.contentResolver.openOutputStream(uri, "wt")?.use { it.write(json.toString(2).toByteArray()) }
             ?: error("Datei konnte nicht geschrieben werden")
+    }
+
+    /**
+     * Liest einen exportierten Raum. Figuren, die es hier schon gibt (gleiche Id oder gleicher Name),
+     * werden wiederverwendet, die anderen neu angelegt. Gibt den Raum (neue Id) und die neuen Figuren zurück.
+     */
+    fun importRoom(uri: Uri, existing: List<Character>): Pair<Room, List<Character>> {
+        val text = context.contentResolver.openInputStream(uri)?.use { it.readBytes().decodeToString() }
+            ?: error("Datei konnte nicht gelesen werden")
+        val json = JSONObject(text)
+        require(json.optString("format") == "characterfun-raum") { "Das ist kein Character-Fun-Raum." }
+        val idMap = mutableMapOf<String, String>()
+        val added = mutableListOf<Character>()
+        val arr = json.optJSONArray("figuren") ?: JSONArray()
+        for (i in 0 until arr.length()) {
+            val o = arr.getJSONObject(i)
+            val old = o.optString("alteId")
+            val name = o.optJSONObject("figur")?.optString("name").orEmpty()
+            val match = existing.firstOrNull { it.id == old } ?: existing.firstOrNull { name.isNotBlank() && it.name.equals(name, true) }
+            if (match != null) idMap[old] = match.id
+            else characterFromJson(o).also { added += it; idMap[old] = it.id }
+        }
+        val r = Room.fromJson(json.getJSONObject("raum"))
+        val room = r.copy(
+            id = java.util.UUID.randomUUID().toString(),
+            memberIds = r.memberIds.map { idMap[it] ?: it },
+            messages = r.messages.map { m -> if (m.speakerId in idMap) m.copy(speakerId = idMap.getValue(m.speakerId)) else m },
+            updatedAt = System.currentTimeMillis(),
+        )
+        return room to added
     }
 
     /** Liest eine exportierte Figur ein – sie bekommt eine neue Id und gilt als eigene Figur. */
@@ -90,13 +147,7 @@ class CharacterRepository(private val context: Context) {
             ?: error("Datei konnte nicht gelesen werden")
         val json = JSONObject(text)
         require(json.optString("format") == "characterfun-figur") { "Das ist keine Character-Fun-Figur." }
-        var c = Character.fromJson(json.getJSONObject("figur").put("id", "")).copy(builtIn = false)
-        json.optString("bild").takeIf { it.isNotEmpty() }?.let { b64 ->
-            val name = "${c.id}-${System.currentTimeMillis()}.jpg"
-            File(avatarDir, name).writeBytes(android.util.Base64.decode(b64, android.util.Base64.DEFAULT))
-            c = c.copy(avatarFile = name)
-        }
-        return c
+        return characterFromJson(json)
     }
 
     // ---------- Fundus (Orte, Kleidung, Stile) und ComfyUI-Vorlage ----------
@@ -185,20 +236,27 @@ class CharacterRepository(private val context: Context) {
 
     private val chatsDir: File get() = File(dataDir, "Chats").apply { mkdirs() }
 
-    private fun chatFile(characterId: String) = File(chatsDir, "$characterId.json")
+    /** Erster Strang: <figur>.json, weitere: <figur>~<strang>.json */
+    private fun chatFile(characterId: String, threadId: String = "") =
+        File(chatsDir, if (threadId.isBlank()) "$characterId.json" else "$characterId~$threadId.json")
 
-    fun loadChat(characterId: String): SavedChat? = runCatching {
-        chatFile(characterId).takeIf { it.exists() }?.let { SavedChat.fromJson(JSONObject(it.readText())) }
+    fun loadChat(characterId: String, threadId: String = ""): SavedChat? = runCatching {
+        chatFile(characterId, threadId).takeIf { it.exists() }?.let { SavedChat.fromJson(JSONObject(it.readText())).copy(threadId = threadId) }
     }.getOrNull()
 
     fun saveChat(chat: SavedChat) {
-        val tmp = File(chatsDir, "${chat.characterId}.json.tmp")
+        val tmp = File(chatsDir, "${chat.key}.json.tmp")
         tmp.writeText(chat.toJson().toString(2))
-        tmp.renameTo(chatFile(chat.characterId))
+        tmp.renameTo(chatFile(chat.characterId, chat.threadId))
     }
 
-    fun deleteChat(characterId: String) {
-        chatFile(characterId).delete()
+    fun deleteChat(characterId: String, threadId: String = "") {
+        chatFile(characterId, threadId).delete()
+    }
+
+    /** Alle Stränge einer Figur löschen */
+    fun deleteAllChats(characterId: String) {
+        chatsDir.listFiles { f -> f.name == "$characterId.json" || f.name.startsWith("$characterId~") }?.forEach { it.delete() }
     }
 
     /** Ein Bild für den Chat als verkleinertes JPEG in Chats/Bilder ablegen. Gibt den Pfad zurück. */

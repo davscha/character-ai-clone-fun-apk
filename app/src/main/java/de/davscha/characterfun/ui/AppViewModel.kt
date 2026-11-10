@@ -535,7 +535,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun deleteCharacter(id: String) {
         characters.firstOrNull { it.id == id }?.let { c -> repo.avatar(c)?.delete() }
         characters.removeAll { it.id == id }
-        repo.deleteChat(id)
+        repo.deleteAllChats(id)
         recentChats.removeAll { it.characterId == id }
         // Chat mit der gelöschten Figur aus dem Verlauf entfernen
         backStack.removeAll { it is Screen.Chat && it.characterId == id }
@@ -697,14 +697,18 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Öffnet den Chat mit einer Figur; ein gespeichertes Gespräch geht dort weiter, wo es aufgehört hat. */
     /** [replace] = im Tablet-Layout von einem Chat direkt zum nächsten wechseln (ohne Zurück-Schritt) */
-    fun openChat(c: Character, replace: Boolean = false) {
+    fun openChat(c: Character, replace: Boolean = false, threadId: String? = null, jumpTo: Int? = null) {
         stop()
         chatCharacter = c
+        // Ohne Angabe: der zuletzt benutzte Strang dieser Figur
+        chatThreadId = threadId ?: recentChats.firstOrNull { it.characterId == c.id }?.threadId ?: ""
+        jumpToMessage = jumpTo
         messages.clear()
         suggestions.clear()
         stopSpeaking()
         pendingImage = null
-        val saved = repo.loadChat(c.id)
+        val saved = repo.loadChat(c.id, chatThreadId)
+        chatThreadTitle = saved?.title.orEmpty()
         if (saved != null && saved.messages.isNotEmpty()) messages.addAll(saved.messages)
         else if (c.greeting.isNotBlank()) messages += ChatMessage.bot(c.greeting)
         memories.clear()
@@ -724,7 +728,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun restartChat() {
         val c = chatCharacter ?: return
         stop()
-        repo.deleteChat(c.id)
+        repo.deleteChat(c.id, chatThreadId)
+        recentChats.removeAll { it.key == currentChatKey }
         messages.clear()
         if (c.greeting.isNotBlank()) messages += ChatMessage.bot(c.greeting)
         summary = ""
@@ -1943,6 +1948,123 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---------- Gespeicherte Chats ----------
 
+    /** Gesprächsstrang im offenen Chat: leer = erster Strang */
+    var chatThreadId by mutableStateOf("")
+        private set
+    var chatThreadTitle by mutableStateOf("")
+        private set
+    val currentChatKey: String get() {
+        val id = chatCharacter?.id.orEmpty()
+        return if (chatThreadId.isBlank()) id else "$id~$chatThreadId"
+    }
+
+    /** Nach dem Öffnen (z. B. aus der Suche) zu dieser Nachricht springen */
+    var jumpToMessage by mutableStateOf<Int?>(null)
+    fun jumpDone() { jumpToMessage = null }
+
+    /** Alle gespeicherten Stränge der Figur, neueste zuerst */
+    fun threadsOf(c: Character) = recentChats.filter { it.characterId == c.id }
+
+    /** Neuer Strang mit derselben Figur – der bisherige bleibt gespeichert */
+    fun newThread(title: String) {
+        val c = chatCharacter ?: return
+        stop()
+        saveChat()
+        openChat(c, replace = true, threadId = java.util.UUID.randomUUID().toString().take(8))
+        chatThreadTitle = title.trim()
+        if (chatThreadTitle.isNotBlank()) saveChat()
+    }
+
+    fun renameThread(title: String) {
+        chatThreadTitle = title.trim()
+        saveChat()
+    }
+
+    fun switchThread(threadId: String) {
+        val c = chatCharacter ?: return
+        if (threadId == chatThreadId) return
+        saveChat()
+        openChat(c, replace = true, threadId = threadId)
+    }
+
+    /** Einen anderen (nicht den offenen) Strang löschen */
+    fun deleteThread(chat: SavedChat) {
+        if (chat.key == currentChatKey) return
+        repo.deleteChat(chat.characterId, chat.threadId)
+        recentChats.removeAll { it.key == chat.key }
+    }
+
+    // ---------- Suche in allen Chats und Räumen ----------
+
+    data class SearchHit(val characterId: String, val threadId: String, val roomId: String, val index: Int, val title: String, val snippet: String)
+
+    suspend fun searchChats(query: String): List<SearchHit> {
+        val q = query.trim()
+        if (q.length < 2) return emptyList()
+        val chats = recentChats.toList()
+        val roomList = rooms.toList()
+        return withContext(Dispatchers.Default) {
+            fun snip(t: String): String {
+                val clean = Mood.strip(t).replace('\n', ' ')
+                val i = clean.indexOf(q, ignoreCase = true).coerceAtLeast(0)
+                val from = (i - 40).coerceAtLeast(0)
+                return (if (from > 0) "…" else "") + clean.substring(from, (i + q.length + 80).coerceAtMost(clean.length)) + if (i + q.length + 80 < clean.length) "…" else ""
+            }
+            val hits = mutableListOf<SearchHit>()
+            chats.forEach { chat ->
+                val name = character(chat.characterId)?.name ?: return@forEach
+                val title = name + if (chat.title.isNotBlank()) " · ${chat.title}" else ""
+                chat.messages.forEachIndexed { i, m ->
+                    if (!m.note && m.text.contains(q, ignoreCase = true)) hits += SearchHit(chat.characterId, chat.threadId, "", i, title, (if (m.fromUser) tr("Du") + ": " else "") + snip(m.text))
+                }
+            }
+            roomList.forEach { r ->
+                r.messages.forEachIndexed { i, m ->
+                    if (m.text.contains(q, ignoreCase = true)) {
+                        val who = if (m.fromUser) tr("Du") else character(m.speakerId)?.name ?: ""
+                        hits += SearchHit("", "", r.id, i, "👥 " + r.name.ifBlank { tr("Raum") }, (if (who.isNotBlank()) "$who: " else "") + snip(m.text))
+                    }
+                }
+            }
+            hits.take(200)
+        }
+    }
+
+    fun openHit(h: SearchHit) {
+        if (h.roomId.isNotBlank()) { rooms.firstOrNull { it.id == h.roomId }?.let { openRoom(it) }; return }
+        character(h.characterId)?.let { openChat(it, threadId = h.threadId, jumpTo = h.index) }
+    }
+
+    // ---------- Darstellung ----------
+
+    /** "dunkel", "hell" oder "system" */
+    var themeMode by mutableStateOf(prefs.getString("design", "dunkel") ?: "dunkel")
+        private set
+    var fontScale by mutableStateOf(prefs.getFloat("schrift", 1f))
+        private set
+
+    fun changeThemeMode(m: String) { themeMode = m; prefs.edit().putString("design", m).apply() }
+    fun changeFontScale(f: Float) { fontScale = f; prefs.edit().putFloat("schrift", f).apply() }
+
+    // ---------- Räume exportieren / importieren ----------
+
+    suspend fun exportRoom(r: Room, uri: Uri): String = try {
+        withContext(Dispatchers.IO) { repo.exportRoom(r, roomMembers(r), uri) }
+        tr("%s exportiert", r.name.ifBlank { tr("Raum") })
+    } catch (e: Exception) {
+        tr("Export fehlgeschlagen: %s", e.message)
+    }
+
+    suspend fun importRoom(uri: Uri): String = try {
+        val (room, added) = withContext(Dispatchers.IO) { repo.importRoom(uri, characters.toList()) }
+        added.forEach { saveCharacter(it) }
+        saveRoom(room)
+        if (added.isEmpty()) tr("%s importiert", room.name.ifBlank { tr("Raum") })
+        else tr("%s importiert (%s neue Figuren)", room.name.ifBlank { tr("Raum") }, added.size)
+    } catch (e: Exception) {
+        tr("Import fehlgeschlagen: %s", e.message)
+    }
+
     private fun refreshRecentChats() {
         recentChats.clear()
         recentChats.addAll(repo.recentChats().filter { chat -> characters.any { it.id == chat.characterId } })
@@ -1954,16 +2076,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             c.id, System.currentTimeMillis(), messages.toList(),
             memories = memories.toList(), summary = summary, summarizedUpTo = summarizedUpTo, game = game,
             locationId = chatLocationId, outfitId = chatOutfitId,
+            threadId = chatThreadId, title = chatThreadTitle,
         )
-        if (chat.messages.none { it.fromUser } && chat.memories.isEmpty()) {
+        if (chat.messages.none { it.fromUser } && chat.memories.isEmpty() && chat.title.isBlank()) {
             // Nichts mehr übrig (z. B. alles gelöscht) – gespeicherten Chat entfernen
-            repo.deleteChat(c.id)
-            recentChats.removeAll { it.characterId == c.id }
+            repo.deleteChat(c.id, chatThreadId)
+            recentChats.removeAll { it.key == chat.key }
             return
         }
         viewModelScope.launch {
             withContext(Dispatchers.IO) { repo.saveChat(chat) }
-            recentChats.removeAll { it.characterId == c.id }
+            recentChats.removeAll { it.key == chat.key }
             if (chat.messages.any { it.fromUser }) recentChats.add(0, chat)
         }
     }

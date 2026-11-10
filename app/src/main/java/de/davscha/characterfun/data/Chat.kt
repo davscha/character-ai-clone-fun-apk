@@ -64,7 +64,12 @@ data class SavedChat(
     /** Gewählter Ort und Kleidung aus dem Fundus (leer = keiner / Standard-Outfit) */
     val locationId: String = "",
     val outfitId: String = "",
+    /** Gesprächsstrang: leer = erster Strang, sonst eigene Id; dazu ein Name */
+    val threadId: String = "",
+    val title: String = "",
 ) {
+    /** Eindeutig über alle Figuren und Stränge */
+    val key: String get() = if (threadId.isBlank()) characterId else "$characterId~$threadId"
     /** Letzte Nachricht für die "Weiter chatten"-Leiste */
     val preview: String get() = Mood.strip(messages.lastOrNull()?.text.orEmpty()).replace('\n', ' ')
 
@@ -78,6 +83,8 @@ data class SavedChat(
         .apply { game?.let { put("spiel", it.toJson()) } }
         .put("ort", locationId)
         .put("outfit", outfitId)
+        .put("strang", threadId)
+        .put("titel", title)
 
     companion object {
         fun fromJson(o: JSONObject): SavedChat {
@@ -93,6 +100,8 @@ data class SavedChat(
                 game = GameState.fromJson(o.optJSONObject("spiel")),
                 locationId = o.optString("ort"),
                 outfitId = o.optString("outfit"),
+                threadId = o.optString("strang"),
+                title = o.optString("titel"),
             )
         }
     }

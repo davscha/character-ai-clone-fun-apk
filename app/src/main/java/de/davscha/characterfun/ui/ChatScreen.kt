@@ -81,6 +81,8 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.HorizontalDivider
@@ -116,13 +118,25 @@ fun ChatScreen(vm: AppViewModel) {
     val c = vm.chatCharacter ?: return
     val avatarFile = vm.repo.avatar(c)
     val listState = rememberLazyListState()
+    // Gefundene Nachricht kurz hervorheben
+    var highlight by remember { mutableStateOf<Int?>(null) }
+    LaunchedEffect(highlight) { if (highlight != null) { kotlinx.coroutines.delay(2500); highlight = null } }
+    var showThreads by remember { mutableStateOf(false) }
+    if (showThreads) ThreadsDialog(vm, c, onRestart = { showThreads = false; confirmRestartState.value = true }) { showThreads = false }
     val lastText = vm.messages.lastOrNull()?.text
     // Beim Streamen immer zur neuesten Nachricht scrollen
     LaunchedEffect(vm.messages.size, lastText) {
-        if (vm.messages.isNotEmpty()) listState.scrollToItem(vm.messages.lastIndex, Int.MAX_VALUE)
+        val jump = vm.jumpToMessage
+        // Aus der Suche: zur gefundenen Nachricht (vor den Nachrichten stehen 1–2 Kopf-Einträge)
+        if (jump != null && jump in vm.messages.indices) {
+            listState.scrollToItem(jump + 1 + if (c.scenario.isNotBlank()) 1 else 0)
+            highlight = jump
+            vm.jumpDone()
+        } else if (vm.messages.isNotEmpty()) listState.scrollToItem(vm.messages.lastIndex, Int.MAX_VALUE)
     }
 
-    var confirmRestart by remember { mutableStateOf(false) }
+    val confirmRestartState = remember { mutableStateOf(false) }
+    var confirmRestart by confirmRestartState
     var showMemories by remember { mutableStateOf(false) }
     if (showMemories) MemoriesDialog(vm, c) { showMemories = false }
     var showGames by remember { mutableStateOf(false) }
@@ -249,10 +263,10 @@ fun ChatScreen(vm: AppViewModel) {
                 Text(if (vm.memories.isEmpty()) tr("Erinnerungen") else tr("Erinnerungen (%s)", vm.memories.size))
             }
             IconButton(onClick = { vm.navigate(Screen.Editor(c.id)) }) { Icon(Icons.Default.Edit, "Figur bearbeiten") }
-            TextButton(onClick = { confirmRestart = true }, enabled = !vm.isGenerating) {
-                Icon(Icons.Default.Refresh, null)
+            TextButton(onClick = { showThreads = true }, enabled = !vm.isGenerating) {
+                Text("🧵")
                 Spacer(Modifier.width(6.dp))
-                Text(tr("Neues Gespräch"))
+                Text(vm.chatThreadTitle.ifBlank { tr("Gespräche") }, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 160.dp))
             }
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outline)
@@ -289,6 +303,13 @@ fun ChatScreen(vm: AppViewModel) {
                     }
                 }
                 itemsIndexed(vm.messages) { i, msg ->
+                  Box(
+                    Modifier.fillMaxWidth().background(
+                        if (highlight == i) MaterialTheme.colorScheme.secondary.copy(alpha = 0.18f) else androidx.compose.ui.graphics.Color.Transparent,
+                        RoundedCornerShape(12.dp),
+                    ),
+                    contentAlignment = Alignment.Center,
+                  ) {
                     if (msg.note) {
                         // Hinweis der Spielleitung (Ort/Kleidung gewechselt)
                         Text(
@@ -314,6 +335,7 @@ fun ChatScreen(vm: AppViewModel) {
                         speaking = vm.speakingId == "msg-$i",
                         onSpeak = { vm.speak(i) },
                     )
+                  }
                 }
             }
             EngineOverlay(vm, Modifier.align(Alignment.Center))
@@ -1096,5 +1118,68 @@ private fun BookDialog(vm: AppViewModel, onClose: () -> Unit) {
                 if (!running) TextButton(onClick = onClose) { Text(if (uri != null) tr("Schließen") else tr("Abbrechen")) }
             }
         },
+    )
+}
+
+/** Gesprächsstränge mit derselben Figur: wechseln, neu anlegen, umbenennen, löschen */
+@Composable
+private fun ThreadsDialog(vm: AppViewModel, c: Character, onRestart: () -> Unit, onClose: () -> Unit) {
+    var newTitle by remember { mutableStateOf<String?>(null) }
+    var rename by remember { mutableStateOf<String?>(null) }
+    var confirmDelete by remember { mutableStateOf<de.davscha.characterfun.data.SavedChat?>(null) }
+    confirmDelete?.let { chat ->
+        AlertDialog(
+            onDismissRequest = { confirmDelete = null },
+            title = { Text(tr("Gespräch löschen?")) },
+            text = { Text(tr("„%s“ wird gelöscht.", chat.title.ifBlank { chat.preview.take(40) })) },
+            confirmButton = { TextButton(onClick = { vm.deleteThread(chat); confirmDelete = null }) { Text(tr("Löschen")) } },
+            dismissButton = { TextButton(onClick = { confirmDelete = null }) { Text(tr("Abbrechen")) } },
+        )
+    }
+    AlertDialog(
+        onDismissRequest = onClose,
+        title = { Text("🧵 " + tr("Gespräche mit %s", c.name)) },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(tr("Jedes Gespräch hat seinen eigenen Verlauf, eigene Erinnerungen und ein eigenes Spiel."), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                val current = vm.currentChatKey
+                val list = vm.threadsOf(c).let { l -> if (l.none { it.key == current }) listOf<de.davscha.characterfun.data.SavedChat?>(null) + l else l }
+                list.forEach { chat ->
+                    val isCurrent = chat == null || chat.key == current
+                    val title = if (isCurrent) vm.chatThreadTitle.ifBlank { chat?.title.orEmpty() } else chat!!.title
+                    Card(
+                        onClick = { if (!isCurrent && chat != null) { vm.switchThread(chat.threadId); onClose() } },
+                        colors = CardDefaults.cardColors(containerColor = if (isCurrent) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f) else MaterialTheme.colorScheme.surfaceVariant),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Row(Modifier.padding(start = 12.dp, top = 8.dp, bottom = 8.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text(title.ifBlank { tr("Ohne Namen") } + if (isCurrent) "  · " + tr("offen") else "", fontWeight = FontWeight.SemiBold, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text((if (isCurrent) vm.messages.lastOrNull()?.text?.let { Mood.strip(it) } else chat?.preview).orEmpty().replace('\n', ' '),
+                                    fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+                            if (isCurrent) IconButton(onClick = { rename = vm.chatThreadTitle }) { Icon(Icons.Default.Edit, tr("Umbenennen")) }
+                            else IconButton(onClick = { confirmDelete = chat }) { Icon(Icons.Default.Delete, tr("Löschen")) }
+                        }
+                    }
+                }
+                rename?.let { t ->
+                    OutlinedTextField(value = t, onValueChange = { rename = it }, label = { Text(tr("Name des offenen Gesprächs")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    TextButton(onClick = { vm.renameThread(t); rename = null }) { Text(tr("Namen speichern")) }
+                }
+                HorizontalDivider()
+                val nt = newTitle
+                if (nt == null) {
+                    TextButton(onClick = { newTitle = "" }) { Text("➕ " + tr("Neues Gespräch (das offene bleibt)")) }
+                    TextButton(onClick = onRestart) {
+                        Icon(Icons.Default.Refresh, null); Spacer(Modifier.width(6.dp)); Text(tr("Offenes Gespräch neu anfangen"))
+                    }
+                } else {
+                    OutlinedTextField(value = nt, onValueChange = { newTitle = it }, label = { Text(tr("Name (optional)")) }, placeholder = { Text(tr("z. B. Abenteuer im Wald")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    Button(onClick = { vm.newThread(nt); onClose() }) { Text(tr("Anlegen")) }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onClose) { Text(tr("Schließen")) } },
     )
 }

@@ -1,5 +1,7 @@
 package de.davscha.characterfun.ui
 
+import androidx.compose.foundation.layout.heightIn
+
 import de.davscha.characterfun.Edition
 
 import androidx.compose.foundation.horizontalScroll
@@ -129,6 +131,11 @@ fun GalleryScreen(vm: AppViewModel) {
             val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
                 if (uri != null) scope.launch { Toast.makeText(context, vm.importCharacter(uri), Toast.LENGTH_LONG).show() }
             }
+            val roomImport = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+                if (uri != null) scope.launch { Toast.makeText(context, vm.importRoom(uri), Toast.LENGTH_LONG).show() }
+            }
+            var chatSearch by remember { mutableStateOf(false) }
+            if (chatSearch) ChatSearchDialog(vm) { chatSearch = false }
             val title: @Composable (Modifier) -> Unit = { m ->
                 Column(m) {
                     Text(tr("Character Fun"), fontSize = 26.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, maxLines = 1)
@@ -164,6 +171,11 @@ fun GalleryScreen(vm: AppViewModel) {
                     Icon(Icons.Default.FileOpen, null)
                     Spacer(Modifier.width(6.dp))
                     Text(tr("Importieren"))
+                }
+                TextButton(onClick = { chatSearch = true }) {
+                    Icon(Icons.Default.Search, null)
+                    Spacer(Modifier.width(6.dp))
+                    Text(tr("In Chats suchen"))
                 }
                 if (Edition.PRO) TextButton(onClick = { vm.navigate(Screen.FundusPage) }) {
                     Text("🎭")
@@ -215,8 +227,8 @@ fun GalleryScreen(vm: AppViewModel) {
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     modifier = Modifier.padding(bottom = 16.dp),
                 ) {
-                    items(vm.recentChats, key = { it.characterId }) { chat ->
-                        vm.character(chat.characterId)?.let { c -> RecentChatCard(vm, c, chat.preview) }
+                    items(vm.recentChats, key = { it.key }) { chat ->
+                        vm.character(chat.characterId)?.let { c -> RecentChatCard(vm, c, chat) }
                     }
                 }
             }
@@ -245,6 +257,20 @@ fun GalleryScreen(vm: AppViewModel) {
                                 Icon(Icons.Default.Add, null, tint = MaterialTheme.colorScheme.primary)
                                 Spacer(Modifier.width(8.dp))
                                 Text(tr("Raum erstellen"), color = MaterialTheme.colorScheme.primary)
+                            }
+                        }
+                    }
+                    item {
+                        Card(
+                            onClick = { roomImport.launch(arrayOf("application/json", "application/octet-stream", "*/*")) },
+                            shape = RoundedCornerShape(14.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                            modifier = Modifier.width(200.dp).height(72.dp),
+                        ) {
+                            Row(Modifier.fillMaxSize().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.FileOpen, null, tint = MaterialTheme.colorScheme.primary)
+                                Spacer(Modifier.width(8.dp))
+                                Text(tr("Raum importieren"), color = MaterialTheme.colorScheme.primary)
                             }
                         }
                     }
@@ -382,9 +408,10 @@ private fun CharacterCard(vm: AppViewModel, c: Character) {
 }
 
 @Composable
-private fun RecentChatCard(vm: AppViewModel, c: Character, preview: String) {
+private fun RecentChatCard(vm: AppViewModel, c: Character, chat: de.davscha.characterfun.data.SavedChat) {
+    val preview = chat.preview
     Card(
-        onClick = { vm.openChat(c) },
+        onClick = { vm.openChat(c, threadId = chat.threadId) },
         shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         modifier = Modifier.width(280.dp),
@@ -393,7 +420,7 @@ private fun RecentChatCard(vm: AppViewModel, c: Character, preview: String) {
             Avatar(c, vm.repo.avatar(c), size = 48.dp)
             Spacer(Modifier.width(12.dp))
             Column {
-                Text(c.name, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(c.name + if (chat.title.isNotBlank()) " · ${chat.title}" else "", fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(
                     preview,
                     fontSize = 12.sp,
@@ -435,4 +462,51 @@ private fun RoomCard(vm: AppViewModel, r: de.davscha.characterfun.data.Room) {
             }
         }
     }
+}
+
+/** Suche in allen gespeicherten Chats und Räumen – Antippen springt zur Stelle */
+@Composable
+private fun ChatSearchDialog(vm: AppViewModel, onClose: () -> Unit) {
+    var q by remember { mutableStateOf("") }
+    var hits by remember { mutableStateOf<List<AppViewModel.SearchHit>>(emptyList()) }
+    androidx.compose.runtime.LaunchedEffect(q) {
+        kotlinx.coroutines.delay(250)
+        hits = vm.searchChats(q)
+    }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onClose,
+        title = { Text("🔎 " + tr("In Chats suchen")) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = q, onValueChange = { q = it },
+                    placeholder = { Text(tr("Wort oder Satzteil")) },
+                    leadingIcon = { Icon(Icons.Default.Search, null) },
+                    singleLine = true, modifier = Modifier.fillMaxWidth(),
+                )
+                when {
+                    q.trim().length < 2 -> Text(tr("Mindestens zwei Zeichen eingeben."), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    hits.isEmpty() -> Text(tr("Nichts gefunden."), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    else -> {
+                        Text(if (hits.size >= 200) tr("Mehr als 200 Treffer – die ersten 200:") else tr("%s Treffer", hits.size), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        androidx.compose.foundation.lazy.LazyColumn(Modifier.heightIn(max = 420.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            items(hits) { h ->
+                                Card(
+                                    onClick = { onClose(); vm.openHit(h) },
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    Column(Modifier.padding(10.dp)) {
+                                        Text(h.title, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        Text(h.snippet, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onClose) { Text(tr("Schließen")) } },
+    )
 }

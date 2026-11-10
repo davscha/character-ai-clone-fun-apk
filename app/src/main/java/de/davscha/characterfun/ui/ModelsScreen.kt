@@ -1,5 +1,7 @@
 package de.davscha.characterfun.ui
 
+import kotlin.math.roundToInt
+
 import de.davscha.characterfun.Edition
 
 import kotlinx.coroutines.launch
@@ -106,6 +108,22 @@ fun ModelsScreen(vm: AppViewModel) {
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+
+                SectionTitle(tr("Darstellung"))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf("dunkel" to "🌙 " + tr("Dunkel"), "hell" to "☀️ " + tr("Hell"), "system" to "📱 " + tr("Wie das System")).forEach { (k, l) ->
+                        FilterChip(selected = vm.themeMode == k, onClick = { vm.changeThemeMode(k) }, label = { Text(l) })
+                    }
+                }
+                Text(tr("Schriftgröße: %s %%", (vm.fontScale * 100).roundToInt()), fontSize = 13.sp)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("A", fontSize = 12.sp)
+                    androidx.compose.material3.Slider(
+                        value = vm.fontScale, onValueChange = { vm.changeFontScale((it * 20).roundToInt() / 20f) },
+                        valueRange = 0.8f..1.4f, steps = 11, modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
+                    )
+                    Text("A", fontSize = 20.sp)
+                }
 
                 SectionTitle(tr("Über dich"))
                 OutlinedTextField(

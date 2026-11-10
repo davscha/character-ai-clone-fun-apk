@@ -74,10 +74,10 @@ Grundeinstellungen: Positiv-Basis `masterpiece, highres, PandorasBoxStyle`, Nega
 
 ## Runde 2 – Praktisches (Etappe E)
 
-- [ ] **29. Suche in alten Chats**
-- [ ] **30. Mehrere Gesprächsstränge pro Figur**
-- [ ] **31. Hell/Dunkel und Schriftgröße**
-- [ ] **32. Rooms exportieren und importieren**
+- [x] **29. Suche in alten Chats**
+- [x] **30. Mehrere Gesprächsstränge pro Figur**
+- [x] **31. Hell/Dunkel und Schriftgröße**
+- [x] **32. Rooms exportieren und importieren**
 
 ## Erledigt
 

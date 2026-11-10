@@ -34,7 +34,7 @@ class MainActivity : ComponentActivity() {
                 viewModel.testComfy() // PC an? Sonst werden die Bild-Knöpfe ausgegraut
                 onPauseOrDispose { }
             }
-            CharacterFunTheme {
+            CharacterFunTheme(viewModel.themeMode, viewModel.fontScale) {
                 // Surface setzt die helle Schriftfarbe für alle Texte darin
                 Surface(color = MaterialTheme.colorScheme.background) { App(viewModel) }
             }

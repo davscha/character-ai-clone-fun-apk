@@ -33,9 +33,10 @@ import de.davscha.characterfun.i18n.tr
 fun ChatListPane(vm: AppViewModel, modifier: Modifier) {
     val current = vm.chatCharacter
     // Der offene Chat steht immer oben, auch wenn noch nichts geschrieben wurde
-    val chats: List<Pair<Character, String>> = buildList {
-        current?.takeIf { c -> vm.recentChats.none { it.characterId == c.id } }?.let { add(it to tr("Neues Gespräch")) }
-        vm.recentChats.forEach { chat -> vm.character(chat.characterId)?.let { add(it to chat.preview) } }
+    data class Entry(val c: Character, val key: String, val threadId: String, val title: String, val preview: String)
+    val chats: List<Entry> = buildList {
+        current?.takeIf { vm.recentChats.none { it.key == vm.currentChatKey } }?.let { add(Entry(it, vm.currentChatKey, vm.chatThreadId, vm.chatThreadTitle, tr("Neues Gespräch"))) }
+        vm.recentChats.forEach { chat -> vm.character(chat.characterId)?.let { add(Entry(it, chat.key, chat.threadId, chat.title, chat.preview)) } }
     }
     Column(modifier.background(MaterialTheme.colorScheme.surface)) {
         Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -48,20 +49,22 @@ fun ChatListPane(vm: AppViewModel, modifier: Modifier) {
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outline)
         LazyColumn(Modifier.fillMaxSize()) {
-            items(chats, key = { it.first.id }) { (c, preview) ->
-                val selected = c.id == current?.id
+            items(chats, key = { it.key }) { e ->
+                val c = e.c
+                val preview = e.preview
+                val selected = current != null && e.key == vm.currentChatKey
                 Row(
                     Modifier
                         .fillMaxWidth()
                         .background(if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f) else MaterialTheme.colorScheme.surface)
-                        .clickable(enabled = !selected) { vm.openChat(c, replace = true) }
+                        .clickable(enabled = !selected) { vm.openChat(c, replace = true, threadId = e.threadId) }
                         .padding(horizontal = 16.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Avatar(c, vm.repo.avatar(c), size = 44.dp)
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
-                        Text(c.name, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(c.name + if (e.title.isNotBlank()) " · ${e.title}" else "", fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text(
                             preview,
                             fontSize = 12.sp,

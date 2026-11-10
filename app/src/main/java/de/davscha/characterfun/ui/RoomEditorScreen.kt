@@ -1,5 +1,7 @@
 package de.davscha.characterfun.ui
 
+import kotlinx.coroutines.launch
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -72,6 +74,14 @@ fun RoomEditorScreen(vm: AppViewModel, roomId: String?) {
                 modifier = Modifier.weight(1f),
             )
             if (existing != null) {
+                val ctx = androidx.compose.ui.platform.LocalContext.current
+                val scope = androidx.compose.runtime.rememberCoroutineScope()
+                val exportLauncher = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.CreateDocument("application/json")) { uri ->
+                    if (uri != null) scope.launch { android.widget.Toast.makeText(ctx, vm.exportRoom(existing, uri), android.widget.Toast.LENGTH_LONG).show() }
+                }
+                TextButton(onClick = { exportLauncher.launch("${existing.name.ifBlank { "Raum" }.replace(Regex("[^\\p{L}\\p{N} _-]"), "")}.raum.json") }) {
+                    Text("📤 " + tr("Exportieren"))
+                }
                 IconButton(onClick = { confirmDelete = true }) { Icon(Icons.Default.Delete, tr("Löschen")) }
             }
             Button(
