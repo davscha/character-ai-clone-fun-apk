@@ -132,7 +132,7 @@ fun EditorScreen(vm: AppViewModel, characterId: String?) {
                 ProfileCheck(vm, c.copy(starters = starters.filter { it.isNotBlank() }))
 
                 // Womit ein neues Gespräch beginnt: Ort und Kleidung aus dem Fundus
-                if (Edition.PRO) Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(tr("Start:"), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     LocationPicker(vm, vm.location(c.defaultLocationId)) { c = c.copy(defaultLocationId = it) }
                     OutfitPicker(vm, c, vm.clothing(c.defaultOutfitId), noneLabel = tr("Keine besondere Kleidung")) { id ->

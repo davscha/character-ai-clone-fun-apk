@@ -31,6 +31,7 @@ fun tr(de: String, vararg args: Any?): String {
 
 /** Deutsch → [Englisch, Spanisch, Französisch] */
 private val TABLE: Map<String, Array<String>> = mapOf(
+    "Orte und Kleidung für alle Figuren – für Chat und Geschichten." to arrayOf("Places and clothing for all characters – for chat and stories.", "Lugares y ropa para todos los personajes – para el chat y las historias.", "Lieux et vêtements pour tous les personnages – pour le chat et les histoires."),
     "In Chats suchen" to arrayOf("Search chats", "Buscar en chats", "Chercher dans les chats"),
     "Wort oder Satzteil" to arrayOf("Word or phrase", "Palabra o frase", "Mot ou expression"),
     "Mindestens zwei Zeichen eingeben." to arrayOf("Enter at least two characters.", "Escribe al menos dos caracteres.", "Saisis au moins deux caractères."),

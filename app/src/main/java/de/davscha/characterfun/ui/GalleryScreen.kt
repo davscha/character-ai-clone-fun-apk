@@ -177,7 +177,7 @@ fun GalleryScreen(vm: AppViewModel) {
                     Spacer(Modifier.width(6.dp))
                     Text(tr("In Chats suchen"))
                 }
-                if (Edition.PRO) TextButton(onClick = { vm.navigate(Screen.FundusPage) }) {
+                TextButton(onClick = { vm.navigate(Screen.FundusPage) }) {
                     Text("🎭")
                     Spacer(Modifier.width(6.dp))
                     Text(tr("Fundus"))

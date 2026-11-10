@@ -1,5 +1,7 @@
 package de.davscha.characterfun.ui
 
+import de.davscha.characterfun.Edition
+
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -99,7 +101,7 @@ fun FundusScreen(vm: AppViewModel) {
                 Column(Modifier.weight(1f)) {
                     Text(tr("Fundus"), fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
                     Text(
-                        tr("Orte, Kleidung und Stile für alle Figuren – für Bilder, Chat und Geschichten."),
+                        if (Edition.PRO) tr("Orte, Kleidung und Stile für alle Figuren – für Bilder, Chat und Geschichten.") else tr("Orte und Kleidung für alle Figuren – für Chat und Geschichten."),
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -108,11 +110,13 @@ fun FundusScreen(vm: AppViewModel) {
             Row(Modifier.padding(horizontal = 24.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterChip(selected = tab == 0, onClick = { tab = 0 }, label = { Text("🏞️ " + tr("Orte") + " (${vm.fundus.locations.size})") })
                 FilterChip(selected = tab == 1, onClick = { tab = 1 }, label = { Text("👗 " + tr("Kleidung") + " (${vm.fundus.clothing.size})") })
-                FilterChip(selected = tab == 2, onClick = { tab = 2 }, label = { Text("🎨 " + tr("Stile") + " (${vm.fundus.styles.size})") })
+                if (Edition.PRO) FilterChip(selected = tab == 2, onClick = { tab = 2 }, label = { Text("🎨 " + tr("Stile") + " (${vm.fundus.styles.size})") })
             }
             // Wie bei Ollama: PC nicht erreichbar -> Bild-Knöpfe ausgegraut
-            androidx.compose.runtime.LaunchedEffect(Unit) { if (!vm.comfyOk) vm.testComfy() }
-            ComfyStatusBar(vm, Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
+            if (Edition.PRO) {
+                androidx.compose.runtime.LaunchedEffect(Unit) { if (!vm.comfyOk) vm.testComfy() }
+                ComfyStatusBar(vm, Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
+            }
             LazyVerticalGrid(
                 columns = GridCells.Adaptive(minSize = 200.dp),
                 contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 96.dp),
@@ -149,8 +153,9 @@ private fun FundusCard(
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
     ) {
-        PreviewBox(vm, id, preview, emoji, Modifier.fillMaxWidth().aspectRatio(1f))
+        if (Edition.PRO) PreviewBox(vm, id, preview, emoji, Modifier.fillMaxWidth().aspectRatio(1f))
         Column(Modifier.padding(12.dp)) {
+            if (Edition.LITE) Text(emoji, fontSize = 28.sp)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(title, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                 if (isDefault) Icon(Icons.Default.Star, tr("Standard"), tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(18.dp))
@@ -247,19 +252,19 @@ private fun FundusItemDialog(vm: AppViewModel, kind: FundusKind, original: Fundu
                         else Icon(Icons.Default.AutoFixHigh, tr("Tags schreiben lassen"))
                     }
                 }
-                if (kind == FundusKind.CLOTHING) {
+                if (Edition.PRO && kind == FundusKind.CLOTHING) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(tr("Vorschau trägt:"), fontSize = 13.sp)
                         FilterChip(selected = item.model == "1girl", onClick = { item = item.copy(model = "1girl") }, label = { Text("👩 " + tr("Frau")) })
                         FilterChip(selected = item.model == "1boy", onClick = { item = item.copy(model = "1boy") }, label = { Text("👨 " + tr("Mann")) })
                     }
                 }
-                PreviewBox(
+                if (Edition.PRO) PreviewBox(
                     vm, item.id, preview, if (kind == FundusKind.LOCATION) "🏞️" else "👗",
                     Modifier.size(300.dp).clip(RoundedCornerShape(12.dp)),
                 )
                 vm.previewError[item.id]?.let { Text(it, fontSize = 12.sp, color = MaterialTheme.colorScheme.error) }
-                OutlinedButton(
+                if (Edition.PRO) OutlinedButton(
                     onClick = { vm.paintPreview(kind, item.copy(preview = preview)) },
                     enabled = vm.comfyReady && item.tags.isNotBlank() && vm.previewBusy[item.id] != true,
                 ) {

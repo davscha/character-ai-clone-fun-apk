@@ -240,13 +240,13 @@ fun ChatScreen(vm: AppViewModel) {
                         enabled = vm.chatReady,
                         onClick = { writeMenu = false; writing = "brief" },
                     )
-                    DropdownMenuItem(
+                    if (Edition.PRO) DropdownMenuItem(
                         text = { Text(tr("Als Bilderbuch (PDF)")) },
                         leadingIcon = { Text("📚") },
                         enabled = talked && vm.chatReady,
                         onClick = { writeMenu = false; writing = "buch" },
                     )
-                    DropdownMenuItem(
+                    if (Edition.PRO) DropdownMenuItem(
                         text = { Text(tr("Als Comic-Bild")) },
                         leadingIcon = { Text("💬") },
                         enabled = vm.messages.size >= 2,
@@ -271,7 +271,7 @@ fun ChatScreen(vm: AppViewModel) {
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outline)
         vm.game?.let { GameBanner(vm, it) }
-        if (Edition.PRO) SceneBar(vm, c)
+        SceneBar(vm, c)
 
         Box(Modifier.weight(1f).fillMaxWidth()) {
             LazyColumn(
@@ -1054,7 +1054,7 @@ private fun SceneBar(vm: AppViewModel, c: Character) {
         LocationPicker(vm, vm.chatLocation, enabled = !vm.isGenerating) { vm.setChatLocation(it) }
         OutfitPicker(vm, c, vm.clothing(vm.chatOutfitId), enabled = !vm.isGenerating) { vm.setChatOutfit(it) }
         Spacer(Modifier.weight(1f))
-        TextButton(onClick = { sceneDialog = true }, enabled = vm.comfyReady && !vm.isGenerating) {
+        if (Edition.PRO) TextButton(onClick = { sceneDialog = true }, enabled = vm.comfyReady && !vm.isGenerating) {
             Text("📷 " + tr("Bild von der Szene"))
         }
     }
